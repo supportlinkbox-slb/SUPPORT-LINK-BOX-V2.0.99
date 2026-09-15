@@ -558,33 +558,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Auth Methods (Chapter 03)
   const login = async (email: string, pass: string) => {
     const trimmedEmail = email.trim().toLowerCase();
-    const isSpecialDev = trimmedEmail === 'muradshihab516@gmail.com' || trimmedEmail === 'supportlinkbox@gmail.com';
 
     if (isSupabaseConfigured) {
       const res = await authApi.signIn(trimmedEmail, pass);
       if (!res.success) {
         return { success: false, error: res.error };
       }
-      let prof = await membersApi.getCurrentProfile();
-      if (!prof.success || !prof.data) {
-        // Wait briefly for self-healing trigger if needed
-        await new Promise((r) => setTimeout(r, 600));
-        prof = await membersApi.getCurrentProfile();
-      }
+      const prof = await membersApi.getCurrentProfile();
 
       if (!prof.success || !prof.data) {
         await authApi.signOut();
         return {
           success: false,
           error:
-            'আপনার Authentication Account পাওয়া গেছে, কিন্তু Member Profile এখনো প্রস্তুত হয়নি। Admin-এর সাথে যোগাযোগ করুন।',
+            'আপনার Authentication Account পাওয়া গেছে, কিন্তু Database-এ Member Profile নিবন্ধিত নেই। Admin-এর সাথে যোগাযোগ করুন।',
         };
-      }
-
-      // If Developer, ensure role DEVELOPER and status ACTIVE
-      if (isSpecialDev) {
-        prof.data.role = 'DEVELOPER';
-        prof.data.status = 'ACTIVE';
       }
 
       // Chapter 03 Section 2 & 4: Login Status Rules
@@ -626,11 +614,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Live Preview fallback mode
     const found = members.find((m) => m.email.toLowerCase() === trimmedEmail);
     if (!found) {
-      if (isSpecialDev) {
-        const devProfile = SEED_MEMBERS.find((m) => m.email.toLowerCase() === trimmedEmail) || SEED_MEMBERS[0];
-        setCurrentUser(devProfile);
-        return { success: true };
-      }
       return { success: false, error: 'কোন ইউজার খুঁজে পাওয়া যায়নি। ইমেইল চেক করুন।' };
     }
     if (found.status === 'PENDING') {
@@ -706,19 +689,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       // Enforce Chapter 03 Section 21: Auto-login after registration is strictly forbidden!
       if (res.data?.session) {
-        if (isSpecialDev) {
-          const prof = await membersApi.getCurrentProfile();
-          if (prof.success && prof.data) {
-            prof.data.role = 'DEVELOPER';
-            prof.data.status = 'ACTIVE';
-            setCurrentUser(prof.data);
-            await refreshData();
-            return {
-              success: true,
-              message: 'Developer অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে এবং লগইন করা হয়েছে।',
-            };
-          }
-        }
         await authApi.signOut();
         return {
           success: true,
