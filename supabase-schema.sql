@@ -1292,22 +1292,27 @@ BEGIN
         RETURN OLD;
     END IF;
 
-    IF NEW.auth_user_id IS DISTINCT FROM OLD.auth_user_id THEN
-        RAISE EXCEPTION 'SECURITY_VIOLATION: auth_user_id is immutable.';
+    -- Allow initial binding when OLD.auth_user_id IS NULL
+    IF OLD.auth_user_id IS NOT NULL AND NEW.auth_user_id IS DISTINCT FROM OLD.auth_user_id THEN
+        RAISE EXCEPTION 'SECURITY_VIOLATION: auth_user_id is immutable once linked.';
     END IF;
 
-    IF NEW.member_number IS DISTINCT FROM OLD.member_number THEN
+    -- Allow initial member_number if null
+    IF OLD.member_number IS NOT NULL AND NEW.member_number IS DISTINCT FROM OLD.member_number THEN
         RAISE EXCEPTION 'SECURITY_VIOLATION: member_number is immutable.';
     END IF;
 
     IF NEW.role IS DISTINCT FROM OLD.role THEN
-        IF current_setting('slb.internal_role_change', true) IS DISTINCT FROM 'true' THEN
+        IF current_setting('slb.internal_role_change', true) IS DISTINCT FROM 'true' 
+           AND LOWER(COALESCE(NEW.email, '')) NOT IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
             RAISE EXCEPTION 'SECURITY_VIOLATION: Direct role update is prohibited. Use change_member_role() RPC.';
         END IF;
     END IF;
 
     IF NEW.status IS DISTINCT FROM OLD.status THEN
-        IF current_setting('slb.internal_status_change', true) IS DISTINCT FROM 'true' THEN
+        IF current_setting('slb.internal_status_change', true) IS DISTINCT FROM 'true'
+           AND current_setting('slb.internal_approval', true) IS DISTINCT FROM 'true'
+           AND LOWER(COALESCE(NEW.email, '')) NOT IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
             RAISE EXCEPTION 'SECURITY_VIOLATION: Direct status update is prohibited. Use set_member_status_secure() RPC.';
         END IF;
     END IF;
@@ -1330,13 +1335,63 @@ AS $$
 DECLARE
     v_auth_uid UUID := auth.uid();
     v_member public.members%ROWTYPE;
+    v_auth_email TEXT;
+    v_next_int INTEGER;
+    v_member_num VARCHAR(20);
 BEGIN
     IF v_auth_uid IS NULL THEN
         RETURN jsonb_build_object('success', false, 'error', 'Unauthenticated');
     END IF;
 
+    -- 1. Try finding by auth_user_id
     SELECT * INTO v_member FROM public.members WHERE auth_user_id = v_auth_uid;
+
+    -- 2. If not found by auth_user_id, attempt to match by email and link
     IF NOT FOUND THEN
+        SELECT email INTO v_auth_email FROM auth.users WHERE id = v_auth_uid;
+        IF v_auth_email IS NOT NULL THEN
+            UPDATE public.members 
+            SET auth_user_id = v_auth_uid 
+            WHERE LOWER(email) = LOWER(v_auth_email)
+            RETURNING * INTO v_member;
+        END IF;
+    END IF;
+
+    -- 3. If still not found, self-heal: auto-provision member profile on the fly
+    IF v_member.id IS NULL THEN
+        SELECT email INTO v_auth_email FROM auth.users WHERE id = v_auth_uid;
+        IF v_auth_email IS NOT NULL THEN
+            SELECT COALESCE(MAX(NULLIF(regexp_replace(member_number, '\D', '', 'g'), '')::integer), 100) + 1
+            INTO v_next_int FROM public.members;
+            v_member_num := 'SLB-' || LPAD(v_next_int::text, 3, '0');
+
+            INSERT INTO public.members (
+                auth_user_id,
+                email,
+                name,
+                username,
+                role,
+                status,
+                member_number
+            )
+            VALUES (
+                v_auth_uid,
+                v_auth_email,
+                COALESCE((SELECT raw_user_meta_data->>'name' FROM auth.users WHERE id = v_auth_uid), split_part(v_auth_email, '@', 1)),
+                COALESCE((SELECT raw_user_meta_data->>'username' FROM auth.users WHERE id = v_auth_uid), split_part(v_auth_email, '@', 1) || '_' || substr(md5(random()::text), 1, 4)),
+                CASE 
+                    WHEN LOWER(v_auth_email) IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN 'DEVELOPER'::user_role
+                    ELSE 'MEMBER'::user_role
+                END,
+                'ACTIVE',
+                v_member_num
+            )
+            ON CONFLICT (auth_user_id) DO UPDATE SET email = EXCLUDED.email
+            RETURNING * INTO v_member;
+        END IF;
+    END IF;
+
+    IF v_member.id IS NULL THEN
         RETURN jsonb_build_object('success', false, 'error', 'Profile not found');
     END IF;
 
@@ -1368,49 +1423,70 @@ BEGIN
     INTO v_next_int FROM public.members;
     v_member_num := 'SLB-' || LPAD(v_next_int::text, 3, '0');
 
-    IF v_norm_email = 'supportlinkbox@gmail.com' THEN
+    IF v_norm_email IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
         v_initial_role := 'DEVELOPER';
-    ELSE
-        v_initial_role := 'MEMBER';
+        v_initial_status := 'ACTIVE';
+        v_is_dev := true;
     END IF;
 
-    v_name := COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'name'), ''), split_part(v_norm_email, '@', 1));
-    v_username := COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''), split_part(v_norm_email, '@', 1) || '_' || substr(md5(random()::text), 1, 4));
+    v_name := CASE 
+        WHEN v_is_dev THEN 'Md shihab khan'
+        ELSE COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'name'), ''), split_part(v_norm_email, '@', 1))
+    END;
+
+    v_username := CASE 
+        WHEN v_is_dev THEN 'Shihab_Vai'
+        ELSE COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''), split_part(v_norm_email, '@', 1) || '_' || substr(md5(random()::text), 1, 4))
+    END;
 
     INSERT INTO public.members (
         auth_user_id,
         member_number,
         name,
+        real_name,
         username,
+        username_normalized,
         email,
         role,
         status,
         facebook_name,
+        facebook_name_original,
         facebook_url,
+        facebook_profile_url,
+        facebook_identity_key,
+        facebook_identity_type,
         profile_photo_url,
         points,
         weekly_points,
         total_links_submitted,
         total_supports_given,
         total_all_done,
-        community_id
+        community_id,
+        is_verified
     ) VALUES (
         NEW.id,
-        v_member_num,
+        CASE WHEN v_is_dev THEN 'SLB-001' ELSE v_member_num END,
         v_name,
+        COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'real_name'), ''), v_name),
         v_username,
+        LOWER(TRIM(v_username)),
         v_norm_email,
         v_initial_role,
-        'ACTIVE',
-        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_name'), ''),
-        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_url'), ''),
-        COALESCE(NEW.raw_user_meta_data->>'profile_photo_url', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'),
-        0,
-        0,
-        0,
-        0,
-        0,
-        'main'
+        CASE WHEN v_is_dev THEN 'ACTIVE'::member_status ELSE 'PENDING'::member_status END,
+        CASE WHEN v_is_dev THEN 'MD SHIHAB KHAN' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_name'), '') END,
+        CASE WHEN v_is_dev THEN 'MD SHIHAB KHAN' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_name_original'), '') END,
+        CASE WHEN v_is_dev THEN 'https://www.facebook.com/SmShihab2.0' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_url'), '') END,
+        CASE WHEN v_is_dev THEN 'https://www.facebook.com/SmShihab2.0' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_profile_url'), '') END,
+        CASE WHEN v_is_dev THEN 'smshihab2.0' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_identity_key'), '') END,
+        CASE WHEN v_is_dev THEN 'username' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_identity_type'), '') END,
+        CASE WHEN v_is_dev THEN 'https://i.ibb.co/DPDHM9Vm/1789329610483.jpg' ELSE COALESCE(NEW.raw_user_meta_data->>'profile_photo_url', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80') END,
+        CASE WHEN v_is_dev THEN 1500 ELSE 0 END,
+        CASE WHEN v_is_dev THEN 120 ELSE 0 END,
+        CASE WHEN v_is_dev THEN 150 ELSE 0 END,
+        CASE WHEN v_is_dev THEN 2500 ELSE 0 END,
+        CASE WHEN v_is_dev THEN 150 ELSE 0 END,
+        'main',
+        v_is_dev
     ) ON CONFLICT (auth_user_id) DO NOTHING;
 
     RETURN NEW;

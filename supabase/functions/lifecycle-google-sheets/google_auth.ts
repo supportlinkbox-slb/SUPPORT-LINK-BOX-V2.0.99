@@ -22,7 +22,7 @@ export async function createGoogleAccessToken() {
       ext: true,
       // NOTE: Real implementation needs JWK conversion from PEM
       // This is conceptual for Edge Function logic
-      ... /* PEM to JWK converter needed */
+      // ... PEM to JWK converter needed
     },
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,

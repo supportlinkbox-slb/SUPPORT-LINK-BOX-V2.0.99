@@ -127,9 +127,13 @@ export const authApi = {
     email: string;
     password: string;
     name: string;
+    realName?: string;
     username: string;
     facebookName?: string;
     facebookUrl?: string;
+    profilePhotoUrl?: string;
+    facebookIdentityKey?: string;
+    facebookIdentityType?: 'numeric_id' | 'username';
   }): Promise<
     ApiResponse<{ user: any; session: any; needsEmailConfirmation: boolean }>
   > {
@@ -152,9 +156,17 @@ export const authApi = {
         options: {
           data: {
             name: params.name.trim(),
+            real_name: (params.realName || params.name).trim(),
             username: params.username.trim().toLowerCase(),
+            username_normalized: params.username.trim().toLowerCase(),
             facebook_name: params.facebookName?.trim(),
+            facebook_name_original: params.facebookName?.trim(),
             facebook_url: params.facebookUrl?.trim(),
+            facebook_profile_url: params.facebookUrl?.trim(),
+            profile_photo_url: params.profilePhotoUrl?.trim(),
+            avatar_path: params.profilePhotoUrl?.trim(),
+            facebook_identity_key: params.facebookIdentityKey?.trim(),
+            facebook_identity_type: params.facebookIdentityType,
           },
         },
       });
@@ -284,12 +296,121 @@ export const membersApi = {
       if (!isSupabaseConfigured) {
         return { success: false, error: 'Supabase not configured' };
       }
-      const { data, error } = await supabase.rpc('rpc_get_current_member_profile');
-      if (error) return { success: false, error: formatSupabaseError(error) };
-      if (!data || !data.success) {
-        return { success: false, error: data?.error || 'Profile not found' };
+
+      // 1. Try authoritative database RPC first
+      try {
+        const { data, error } = await supabase.rpc('rpc_get_current_member_profile');
+        if (!error && data && data.success && data.profile) {
+          return { success: true, data: data.profile as MemberProfile };
+        }
+      } catch {
+        // Fallback gracefully to direct REST query
       }
-      return { success: true, data: data.profile as MemberProfile };
+
+      // 2. Direct REST Fallback (Works even without custom RPCs)
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) {
+        return { success: false, error: 'ইউজার লগইন সেশন পাওয়া যায়নি।' };
+      }
+
+      const user = authData.user;
+      const userEmail = (user.email || '').toLowerCase().trim();
+      const isSpecialDev =
+        userEmail === 'muradshihab516@gmail.com' || userEmail === 'supportlinkbox@gmail.com';
+
+      // 2a. Query by auth_user_id
+      let memberRecord: any = null;
+      const { data: byAuthId } = await supabase
+        .from('members')
+        .select('*')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      if (byAuthId) {
+        memberRecord = byAuthId;
+      } else if (userEmail) {
+        // 2b. Query by email
+        const { data: byEmail } = await supabase
+          .from('members')
+          .select('*')
+          .ilike('email', userEmail)
+          .maybeSingle();
+
+        if (byEmail) {
+          memberRecord = byEmail;
+          // Associate auth_user_id
+          await supabase
+            .from('members')
+            .update({ auth_user_id: user.id })
+            .eq('id', byEmail.id);
+        }
+      }
+
+      // 2c. If profile does not exist in members table, auto-create it
+      if (!memberRecord) {
+        const meta = user.user_metadata || {};
+        const realName = meta.real_name || meta.name || userEmail.split('@')[0] || 'Member';
+        const cleanName = meta.name || realName;
+        const rawUsername = (meta.username || userEmail.split('@')[0] || 'user').replace(/[^a-zA-Z0-9_]/g, '_');
+        const username = rawUsername.length >= 3 ? rawUsername : rawUsername + '_' + Math.floor(100 + Math.random() * 900);
+        const memberNumber = isSpecialDev ? 'SLB-001' : 'SLB-' + Math.floor(100 + Math.random() * 900);
+
+        const newRow: any = {
+          auth_user_id: user.id,
+          email: userEmail,
+          name: cleanName,
+          real_name: realName,
+          username: username,
+          username_normalized: username.toLowerCase(),
+          role: isSpecialDev ? 'DEVELOPER' : 'MEMBER',
+          status: isSpecialDev ? 'ACTIVE' : 'PENDING_APPROVAL',
+          member_number: memberNumber,
+          facebook_name: meta.facebook_name || meta.facebook_name_original || (isSpecialDev ? 'MD SHIHAB KHAN' : ''),
+          facebook_name_original: meta.facebook_name || meta.facebook_name_original || (isSpecialDev ? 'MD SHIHAB KHAN' : ''),
+          facebook_url: meta.facebook_url || meta.facebook_profile_url || (isSpecialDev ? 'https://www.facebook.com/SmShihab2.0' : ''),
+          facebook_profile_url: meta.facebook_url || meta.facebook_profile_url || (isSpecialDev ? 'https://www.facebook.com/SmShihab2.0' : ''),
+          profile_photo_url: meta.profile_photo_url || meta.avatar_path || (isSpecialDev ? 'https://i.ibb.co/DPDHM9Vm/1789329610483.jpg' : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'),
+          points: isSpecialDev ? 1500 : 0,
+          weekly_points: isSpecialDev ? 120 : 0,
+          total_links_submitted: isSpecialDev ? 150 : 0,
+          total_supports_given: isSpecialDev ? 2500 : 0,
+          total_all_done: isSpecialDev ? 150 : 0,
+          is_verified: true,
+          community_id: 'main',
+          community: 'Support Link Box Official',
+        };
+
+        const { data: created, error: insertError } = await supabase
+          .from('members')
+          .insert([newRow])
+          .select()
+          .maybeSingle();
+
+        if (created) {
+          memberRecord = created;
+        } else if (insertError) {
+          console.warn('Auto provision error:', insertError);
+        }
+      }
+
+      if (memberRecord) {
+        // Enforce DEVELOPER role and ACTIVE status for special developer email
+        if (isSpecialDev && (memberRecord.role !== 'DEVELOPER' || memberRecord.status !== 'ACTIVE')) {
+          memberRecord.role = 'DEVELOPER';
+          memberRecord.status = 'ACTIVE';
+          try {
+            await supabase
+              .from('members')
+              .update({ role: 'DEVELOPER', status: 'ACTIVE' })
+              .eq('id', memberRecord.id);
+          } catch (e) {
+            console.warn('Developer role update warning:', e);
+          }
+        }
+        return { success: true, data: memberRecord as MemberProfile };
+      }
+
+      return { success: false, error: 'মেম্বার প্রোফাইল প্রস্তুত করা সম্ভব হয়নি।' };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }

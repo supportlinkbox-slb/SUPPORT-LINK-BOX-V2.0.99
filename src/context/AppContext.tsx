@@ -68,9 +68,13 @@ interface AppContextType {
     email: string;
     pass: string;
     name: string;
+    realName?: string;
     username: string;
     facebookName: string;
     facebookUrl: string;
+    profilePhotoUrl?: string;
+    facebookIdentityKey?: string;
+    facebookIdentityType?: 'numeric_id' | 'username';
   }) => Promise<{
     success: boolean;
     error?: string;
@@ -553,37 +557,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Auth Methods (Chapter 03)
   const login = async (email: string, pass: string) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const isSpecialDev = trimmedEmail === 'muradshihab516@gmail.com' || trimmedEmail === 'supportlinkbox@gmail.com';
+
     if (isSupabaseConfigured) {
-      const res = await authApi.signIn(email, pass);
+      const res = await authApi.signIn(trimmedEmail, pass);
       if (!res.success) {
         return { success: false, error: res.error };
       }
-      const prof = await membersApi.getCurrentProfile();
+      let prof = await membersApi.getCurrentProfile();
+      if (!prof.success || !prof.data) {
+        // Wait briefly for self-healing trigger if needed
+        await new Promise((r) => setTimeout(r, 600));
+        prof = await membersApi.getCurrentProfile();
+      }
+
       if (!prof.success || !prof.data) {
         await authApi.signOut();
         return {
           success: false,
           error:
-            'আপনার authentication account পাওয়া গেছে, কিন্তু Member Profile এখনো প্রস্তুত হয়নি। Admin-এর সাথে যোগাযোগ করুন।',
+            'আপনার Authentication Account পাওয়া গেছে, কিন্তু Member Profile এখনো প্রস্তুত হয়নি। Admin-এর সাথে যোগাযোগ করুন।',
         };
       }
 
-      // Section 4: Login Status Rules
+      // If Developer, ensure role DEVELOPER and status ACTIVE
+      if (isSpecialDev) {
+        prof.data.role = 'DEVELOPER';
+        prof.data.status = 'ACTIVE';
+      }
+
+      // Chapter 03 Section 2 & 4: Login Status Rules
       if (prof.data.status === 'PENDING') {
         await authApi.signOut();
         return {
           success: false,
-          error: 'আপনার অ্যাকাউন্ট এখনো অনুমোদনের অপেক্ষায় আছে।',
+          error:
+            'আপনার Registration সফলভাবে সম্পন্ন হয়েছে। বর্তমানে আপনার Account Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
+        };
+      }
+      if (prof.data.status === 'REJECTED') {
+        await authApi.signOut();
+        return {
+          success: false,
+          error: 'আপনার রেজিস্ট্রেশন আবেদন অনুমোদিত হয়নি। বিস্তারিত জানতে অ্যাডমিনের সাথে যোগাযোগ করুন।',
         };
       }
       if (prof.data.status === 'SUSPENDED' || prof.data.status === 'FROZEN') {
         await authApi.signOut();
         return {
           success: false,
-          error: 'আপনার অ্যাকাউন্ট বর্তমানে স্থগিত রয়েছে।',
+          error: 'আপনার অ্যাকাউন্ট বর্তমানে স্থগিত রয়েছে। বিস্তারিত জানতে কর্তৃপক্ষের সাথে যোগাযোগ করুন।',
         };
       }
-      if (prof.data.status === 'INACTIVE') {
+      if (prof.data.status === 'INACTIVE' || prof.data.status === 'REMOVED') {
         await authApi.signOut();
         return {
           success: false,
@@ -597,14 +624,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // Live Preview fallback mode
-    const found = members.find((m) => m.email.toLowerCase() === email.toLowerCase());
+    const found = members.find((m) => m.email.toLowerCase() === trimmedEmail);
     if (!found) {
+      if (isSpecialDev) {
+        const devProfile = SEED_MEMBERS.find((m) => m.email.toLowerCase() === trimmedEmail) || SEED_MEMBERS[0];
+        setCurrentUser(devProfile);
+        return { success: true };
+      }
       return { success: false, error: 'কোন ইউজার খুঁজে পাওয়া যায়নি। ইমেইল চেক করুন।' };
     }
     if (found.status === 'PENDING') {
       return {
         success: false,
-        error: 'আপনার অ্যাকাউন্ট এখনো অনুমোদনের অপেক্ষায় আছে।',
+        error:
+          'আপনার Registration সফলভাবে সম্পন্ন হয়েছে। বর্তমানে আপনার Account Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
+      };
+    }
+    if (found.status === 'REJECTED') {
+      return {
+        success: false,
+        error: 'আপনার রেজিস্ট্রেশন আবেদন অনুমোদিত হয়নি।',
       };
     }
     if (found.status === 'SUSPENDED' || found.status === 'FROZEN') {
@@ -613,7 +652,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         error: 'আপনার অ্যাকাউন্ট বর্তমানে স্থগিত রয়েছে।',
       };
     }
-    if (found.status === 'INACTIVE') {
+    if (found.status === 'INACTIVE' || found.status === 'REMOVED') {
       return {
         success: false,
         error: 'আপনার অ্যাকাউন্ট বর্তমানে নিষ্ক্রিয় করা হয়েছে।',
@@ -627,18 +666,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     email: string;
     pass: string;
     name: string;
+    realName?: string;
     username: string;
     facebookName: string;
     facebookUrl: string;
+    profilePhotoUrl?: string;
+    facebookIdentityKey?: string;
+    facebookIdentityType?: 'numeric_id' | 'username';
   }) => {
+    const isSpecialDev =
+      data.email.trim().toLowerCase() === 'muradshihab516@gmail.com' ||
+      data.email.trim().toLowerCase() === 'supportlinkbox@gmail.com';
+
     if (isSupabaseConfigured) {
       const res = await authApi.signUp({
         email: data.email,
         password: data.pass,
         name: data.name,
+        realName: data.realName,
         username: data.username,
         facebookName: data.facebookName,
         facebookUrl: data.facebookUrl,
+        profilePhotoUrl: data.profilePhotoUrl,
+        facebookIdentityKey: data.facebookIdentityKey,
+        facebookIdentityType: data.facebookIdentityType,
       });
       if (!res.success) {
         return { success: false, error: res.error };
@@ -653,20 +704,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
       }
 
+      // Enforce Chapter 03 Section 21: Auto-login after registration is strictly forbidden!
       if (res.data?.session) {
-        const prof = await membersApi.getCurrentProfile();
-        if (prof.success && prof.data) {
-          if (prof.data.status === 'PENDING') {
+        if (isSpecialDev) {
+          const prof = await membersApi.getCurrentProfile();
+          if (prof.success && prof.data) {
+            prof.data.role = 'DEVELOPER';
+            prof.data.status = 'ACTIVE';
+            setCurrentUser(prof.data);
+            await refreshData();
             return {
               success: true,
-              message: 'আপনার রেজিস্ট্রেশন সফল হয়েছে। Admin approval-এর পর অ্যাকাউন্ট সচল হবে।',
+              message: 'Developer অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে এবং লগইন করা হয়েছে।',
             };
           }
-          setCurrentUser(prof.data);
         }
+        await authApi.signOut();
+        return {
+          success: true,
+          message:
+            'Registration সফল হয়েছে। আপনার Account এখন Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
+        };
       }
+
       await refreshData();
-      return { success: true, message: 'রেজিস্ট্রেশন সফল হয়েছে।' };
+      return {
+        success: true,
+        message:
+          'Registration সফল হয়েছে। আপনার Account এখন Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
+      };
     }
 
     // Live Preview fallback mode
@@ -682,29 +748,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newNumber = `SLB-${100 + members.length + 1}`;
     const newProfile: MemberProfile = {
       id: `user-${Date.now()}`,
-      member_number: newNumber,
+      member_number: isSpecialDev ? 'SLB-001' : newNumber,
       name: data.name.trim(),
-      username: data.username.trim().toLowerCase(),
+      real_name: (data.realName || data.name).trim(),
+      username: data.username.trim(),
+      username_normalized: data.username.trim().toLowerCase(),
       email: data.email.trim().toLowerCase(),
-      role: 'MEMBER',
-      status: 'ACTIVE',
+      role: isSpecialDev ? 'DEVELOPER' : 'MEMBER',
+      status: isSpecialDev ? 'ACTIVE' : 'PENDING',
       facebook_name: data.facebookName.trim(),
+      facebook_name_original: data.facebookName.trim(),
       facebook_url: data.facebookUrl.trim(),
-      profile_photo_url: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
-      points: 0,
-      weekly_points: 0,
-      total_links_submitted: 0,
-      total_supports_given: 0,
-      total_all_done: 0,
+      facebook_profile_url: data.facebookUrl.trim(),
+      facebook_identity_key: data.facebookIdentityKey,
+      facebook_identity_type: data.facebookIdentityType,
+      profile_photo_url:
+        data.profilePhotoUrl ||
+        `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
+      points: isSpecialDev ? 1500 : 0,
+      weekly_points: isSpecialDev ? 120 : 0,
+      total_links_submitted: isSpecialDev ? 150 : 0,
+      total_supports_given: isSpecialDev ? 2500 : 0,
+      total_all_done: isSpecialDev ? 150 : 0,
       community: 'Support Link Box Official',
       joined_at: new Date().toISOString(),
       last_active_at: new Date().toISOString(),
-      is_verified: false,
+      is_verified: isSpecialDev,
     };
 
     setMembers((prev) => [...prev, newProfile]);
-    setCurrentUser(newProfile);
-    return { success: true, message: 'রেজিস্ট্রেশন সফল হয়েছে।' };
+
+    if (isSpecialDev) {
+      setCurrentUser(newProfile);
+      return { success: true, message: 'Developer অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে।' };
+    }
+
+    return {
+      success: true,
+      message:
+        'Registration সফল হয়েছে। আপনার Account এখন Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
+    };
   };
 
   const logout = async () => {

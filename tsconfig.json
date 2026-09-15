@@ -23,5 +23,6 @@
     "types": ["vite/client"],
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": ["supabase", "dist", "node_modules"]
 }

@@ -1,6 +1,6 @@
 export type UserRole = 'DEVELOPER' | 'ADMIN' | 'MEMBER';
 
-export type MemberStatus = 'ACTIVE' | 'PENDING' | 'INACTIVE' | 'FROZEN' | 'SUSPENDED' | 'REMOVED';
+export type MemberStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'INACTIVE' | 'FROZEN' | 'SUSPENDED' | 'REMOVED';
 
 export type PostType = 'Photo' | 'Video';
 
@@ -11,12 +11,18 @@ export interface MemberProfile {
   auth_user_id?: string; // auth.users.id reference
   member_number: string; // e.g. "SLB-101"
   name: string;
+  real_name?: string;
   username: string;
+  username_normalized?: string;
   email: string;
   role: UserRole;
   status: MemberStatus;
   facebook_name?: string;
+  facebook_name_original?: string;
   facebook_url?: string;
+  facebook_profile_url?: string;
+  facebook_identity_key?: string;
+  facebook_identity_type?: 'numeric_id' | 'username';
   profile_photo_url?: string;
   points: number;
   weekly_points: number;
@@ -29,6 +35,8 @@ export interface MemberProfile {
   last_active_at: string;
   days_inactive?: number;
   is_verified?: boolean;
+  approved_at?: string;
+  approved_by?: string;
 }
 
 export interface ApiResponse<T = any> {

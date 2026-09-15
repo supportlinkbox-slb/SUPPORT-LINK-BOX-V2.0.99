@@ -11,15 +11,15 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { MemberProfileView } from './components/member/MemberProfileView';
 import { SpecialSupportDutyBanner } from './components/member/SpecialSupportDutyBanner';
 import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
-import { AuthModal } from './components/auth/AuthModal';
+import { LoginPage } from './components/auth/LoginPage';
+import { StatusGateScreen } from './components/auth/StatusGateScreen';
 import { Flame, CheckCircle2, Shield, Heart } from 'lucide-react';
 
 function MainContent() {
   const [currentTab, setCurrentTab] = useState<string>('links');
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  const { currentUser, authLoading, pendingRequiredSupportCount, isAllDoneSubmittedToday } = useApp();
+  const { currentUser, authLoading } = useApp();
 
   if (authLoading) {
     return (
@@ -35,6 +35,16 @@ function MainContent() {
     );
   }
 
+  // Complete Pre-Login Application Lock: Render ONLY Login Page if not authenticated
+  if (!currentUser) {
+    return <LoginPage />;
+  }
+
+  // Status Gate: Render status notice if member is PENDING, SUSPENDED, REMOVED, or INACTIVE
+  if (currentUser.status !== 'ACTIVE') {
+    return <StatusGateScreen user={currentUser} />;
+  }
+
   const canAccessAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'DEVELOPER';
 
   return (
@@ -43,7 +53,6 @@ function MainContent() {
       <Navbar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
-        onOpenAuth={() => setAuthModalOpen(true)}
         onOpenSubmitModal={() => setSubmitModalOpen(true)}
       />
 
@@ -85,25 +94,7 @@ function MainContent() {
         )}
 
         {currentTab === 'profile' && (
-          currentUser ? (
-            <MemberProfileView />
-          ) : (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto space-y-4 shadow-xl">
-              <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 mx-auto flex items-center justify-center">
-                <Shield className="w-7 h-7" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-white mb-1">প্রোফাইল দেখতে লগইন প্রয়োজন</h2>
-                <p className="text-xs text-slate-400">আপনার নিজস্ব পোস্ট, হিস্টোরি ও পয়েন্ট দেখতে অনুগ্রহ করে লগইন করুন।</p>
-              </div>
-              <button
-                onClick={() => setAuthModalOpen(true)}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-bold shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition"
-              >
-                লগইন বা রেজিস্টার করুন
-              </button>
-            </div>
-          )
+          <MemberProfileView />
         )}
 
         {currentTab === 'admin' && (
@@ -138,11 +129,6 @@ function MainContent() {
       <LinkSubmissionModal
         isOpen={submitModalOpen}
         onClose={() => setSubmitModalOpen(false)}
-      />
-
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
       />
     </div>
   );
