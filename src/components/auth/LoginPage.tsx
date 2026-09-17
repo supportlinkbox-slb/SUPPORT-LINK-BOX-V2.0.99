@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Lock,
   Mail,
@@ -9,26 +9,84 @@ import {
   AlertCircle,
   Clock,
   ShieldAlert,
+  Upload,
+  Link as LinkIcon
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { validateAndExtractFacebookProfile } from '../../utils/facebookLinks';
+import { supabase } from '../../lib/supabase';
+
+const compressImage = async (file: File): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Very aggressive max dimensions for profile pictures
+        const MAX_WIDTH = 250;
+        const MAX_HEIGHT = 250;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(newFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          0.5 // Heavy compression quality (50% instead of 70%)
+        );
+      };
+      img.onerror = (e) => reject(e);
+    };
+    reader.onerror = (e) => reject(e);
+  });
+};
 
 export const LoginPage: React.FC = () => {
   const { login, register, resetPassword } = useApp();
 
-  const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
-  const [email, setEmail] = useState('');
+  const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN'>('LOGIN');
+  const [inviteToken, setInviteToken] = useState('');
+  const [inviteData, setInviteData] = useState<{ member_number?: string; facebook_name?: string } | null>(null);
+  const [loginIdentifier, setLoginIdentifier] = useState(''); // Used for Email or Member ID
+  const [email, setEmail] = useState(''); // Used for Registration
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Registration Fields (Chapter 03 Section 4)
-  const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
-  const [facebookName, setFacebookName] = useState('');
+  const [name, setName] = useState(''); // Facebook Original Name
   const [facebookUrl, setFacebookUrl] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [photoInputMode, setPhotoInputMode] = useState<'UPLOAD' | 'LINK'>('UPLOAD');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
@@ -37,6 +95,7 @@ export const LoginPage: React.FC = () => {
     message: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Facebook live validation
   const fbValidation = React.useMemo(() => {
@@ -44,13 +103,37 @@ export const LoginPage: React.FC = () => {
     return validateAndExtractFacebookProfile(facebookUrl.trim());
   }, [facebookUrl]);
 
-  const handleModeSwitch = (newMode: 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD') => {
+  const handleModeSwitch = (newMode: 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN') => {
     setMode(newMode);
     setErrorMsg('');
     setPendingNotice(null);
     setSuccessNotice(null);
     setPassword('');
     setConfirmPassword('');
+    setInviteToken('');
+    setInviteData(null);
+  };
+
+  const handleVerifyInvite = async () => {
+    if (!inviteToken.trim()) {
+      setErrorMsg('টোকেন প্রদান করুন।');
+      return;
+    }
+    setLoading(true);
+    const { data, error } = await supabase.rpc('verify_invite_token', { p_raw_token: inviteToken.trim() });
+    setLoading(false);
+    
+    if (error) {
+      setErrorMsg('সিস্টেমে সমস্যা হয়েছে, পরে আবার চেষ্টা করুন।');
+      return;
+    }
+    
+    if (data && data.valid) {
+      setInviteData(data);
+      setErrorMsg('');
+    } else {
+      setErrorMsg(data?.reason === 'RATE_LIMITED' ? 'অতিরিক্ত চেষ্টার জন্য ব্লক করা হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।' : 'ইনভ্যালিড বা মেয়াদোত্তীর্ণ টোকেন।');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,6 +141,98 @@ export const LoginPage: React.FC = () => {
     setErrorMsg('');
     setPendingNotice(null);
     setSuccessNotice(null);
+
+    const isLogin = mode === 'LOGIN';
+    const isForgot = mode === 'FORGOT_PASSWORD';
+    const isInvite = mode === 'INVITE_TOKEN';
+    
+    if (isInvite) {
+      if (!inviteData) {
+        await handleVerifyInvite();
+        return;
+      }
+      
+      if (!password || password.length < 6) {
+        setErrorMsg('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMsg('পাসওয়ার্ড দুটি মিলছে না।');
+        return;
+      }
+      
+      setLoading(true);
+      const { data, error } = await supabase.functions.invoke('consume-invite-token', {
+        body: { rawToken: inviteToken.trim(), password }
+      });
+      setLoading(false);
+      
+      if (error || (data && !data.success)) {
+        setErrorMsg(data?.error || 'পাসওয়ার্ড সেট করতে সমস্যা হয়েছে।');
+      } else {
+        setSuccessNotice({
+          type: 'REGISTRATION_SUCCESS',
+          message: 'পাসওয়ার্ড সফলভাবে সেট হয়েছে! এখন Admin Approval-এর জন্য অপেক্ষা করুন।',
+        });
+        setTimeout(() => handleModeSwitch('LOGIN'), 3000);
+      }
+      return;
+    }
+
+    let targetEmail = '';
+    
+    if (isLogin) {
+      const trimmedId = loginIdentifier.trim();
+      if (!trimmedId) {
+        setErrorMsg('Email অথবা Member ID প্রদান করুন।');
+        return;
+      }
+      
+      setLoading(true);
+      // We send identifier AND password to securely resolve if password is correct
+      // This prevents unauthenticated attackers from resolving Member IDs to emails
+      // and checking if accounts are locked or not.
+      const { data: secureAuthResult, error: secureAuthError } = await supabase.rpc('secure_login_check', { 
+        p_identifier: trimmedId,
+        p_password: password
+      });
+
+      if (secureAuthError) {
+        console.error('Secure Login Error:', secureAuthError);
+        setLoading(false);
+        setErrorMsg('সিস্টেমে সমস্যা হয়েছে, পরে আবার চেষ্টা করুন।');
+        return;
+      }
+
+      if (!secureAuthResult?.success) {
+        setLoading(false);
+        if (secureAuthResult?.error === 'ACCOUNT_LOCKED') {
+          const mins = Math.ceil((secureAuthResult.remaining_seconds || 0) / 60);
+          setErrorMsg(`নিরাপত্তার কারণে আপনার অ্যাকাউন্ট সাময়িকভাবে লক করা হয়েছে। ${mins} মিনিট পরে আবার চেষ্টা করুন।`);
+        } else {
+          setErrorMsg(secureAuthResult?.error || 'ভুল Email/Member ID অথবা Password।');
+        }
+        return;
+      }
+
+      // If we got here, secureAuthResult.success is true and we got the canonical email
+      targetEmail = secureAuthResult.email;
+      
+      const res = await login(targetEmail, password);
+      
+      if (!res.success) {
+        setLoading(false);
+        if (res.error?.includes('Admin Approval') || res.error?.includes('অনুমোদনের অপেক্ষায়')) {
+          setPendingNotice(res.error);
+        } else {
+          setErrorMsg('লগইন করতে সমস্যা হচ্ছে।');
+        }
+        return;
+      }
+      
+      setLoading(false);
+      return;
+    }
 
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
@@ -83,20 +258,16 @@ export const LoginPage: React.FC = () => {
     }
 
     if (mode === 'REGISTER') {
+      if (photoInputMode === 'LINK' && !profilePhotoUrl.trim()) {
+        setErrorMsg('প্রোফাইল পিকচার লিংক দিন।');
+        return;
+      }
+      if (photoInputMode === 'UPLOAD' && !profilePhotoFile) {
+        setErrorMsg('প্রোফাইল পিকচার আপলোড করুন।');
+        return;
+      }
       if (!name.trim()) {
-        setErrorMsg('আপনার পূর্ণ নাম (Real Name) প্রদান করুন।');
-        return;
-      }
-      if (!username.trim()) {
-        setErrorMsg('ইউজারনেম (Username) প্রদান করুন।');
-        return;
-      }
-      if (username.length < 3 || username.length > 30) {
-        setErrorMsg('ইউজারনেম ৩ থেকে ৩০ অক্ষরের মধ্যে হতে হবে।');
-        return;
-      }
-      if (!facebookName.trim()) {
-        setErrorMsg('আপনার ফেসবুক প্রোফাইলের নাম প্রদান করুন।');
+        setErrorMsg('আপনার Facebook Original Name প্রদান করুন।');
         return;
       }
       if (facebookUrl.trim()) {
@@ -105,41 +276,57 @@ export const LoginPage: React.FC = () => {
           setErrorMsg(val.error || 'সঠিক ফেসবুক প্রোফাইল লিংক দিন।');
           return;
         }
+      } else {
+        setErrorMsg('ফেসবুক প্রোফাইল লিংক দিন।');
+        return;
       }
       if (password.length < 6) {
         setErrorMsg('আরও শক্তিশালী Password দিন (কমপক্ষে ৬ অক্ষর)।');
         return;
       }
       if (password !== confirmPassword) {
-        setErrorMsg('দুটি Password একই নয়। পুনরায় চেক করুন।');
+        setErrorMsg('দুটি Password একই নয়। পুনরায় চেক করুন।');
         return;
       }
     }
 
     setLoading(true);
 
-    if (mode === 'LOGIN') {
-      const res = await login(trimmedEmail, password);
-      setLoading(false);
-      if (!res.success) {
-        if (res.error?.includes('Admin Approval') || res.error?.includes('অনুমোদনের অপেক্ষায়')) {
-          setPendingNotice(res.error);
-        } else {
-          setErrorMsg(res.error || 'লগইন ব্যর্থ হয়েছে।');
+    if (mode === 'REGISTER') {
+      let finalPhotoUrl = profilePhotoUrl.trim();
+      
+      if (photoInputMode === 'UPLOAD' && profilePhotoFile) {
+        try {
+          const compressedFile = await compressImage(profilePhotoFile);
+          const fileExt = 'jpg';
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `${fileName}`;
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(filePath, compressedFile);
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(filePath);
+          
+          finalPhotoUrl = publicUrl;
+        } catch (error) {
+          setErrorMsg('ছবি আপলোড করতে সমস্যা হয়েছে। Storage তৈরি আছে কিনা নিশ্চিত করুন অথবা ছবির লিংক ব্যবহার করুন।');
+          setLoading(false);
+          return;
         }
       }
-    } else {
+
+      const fbValidation = validateAndExtractFacebookProfile(facebookUrl.trim());
       const res = await register({
         email: trimmedEmail,
         pass: password,
         name: name.trim(),
-        realName: name.trim(),
-        username: username.trim(),
-        facebookName: facebookName.trim(),
         facebookUrl: facebookUrl.trim(),
-        profilePhotoUrl:
-          profilePhotoUrl.trim() ||
-          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        profilePhotoUrl: finalPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         facebookIdentityKey: fbValidation?.identityKey,
         facebookIdentityType: fbValidation?.identityType,
       });
@@ -196,6 +383,8 @@ export const LoginPage: React.FC = () => {
                     ? 'অ্যাকাউন্টে লগইন করুন'
                     : mode === 'REGISTER'
                     ? 'নতুন অ্যাকাউন্ট রেজিস্ট্রেশন'
+                    : mode === 'INVITE_TOKEN'
+                    ? 'Admin Invite Token'
                     : 'পাসওয়ার্ড পুনরুদ্ধার'}
                 </h2>
                 <p className="text-[11px] text-slate-400">Chapter 03 Strict Security Architecture</p>
@@ -263,88 +452,98 @@ export const LoginPage: React.FC = () => {
                 <div className="space-y-4 animate-in fade-in duration-200">
                   {/* Field 1: Profile Photo */}
                   <div className="p-3.5 bg-slate-950/60 rounded-2xl border border-slate-800 space-y-2">
-                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                      ১. Profile Picture লিংক
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                        ১. Profile Picture (প্রোফাইল ছবি)
+                      </label>
+                      <div className="flex bg-slate-800 rounded-lg p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setPhotoInputMode('UPLOAD')}
+                          className={`px-2 py-1 text-[10px] rounded-md transition-colors flex items-center gap-1 ${photoInputMode === 'UPLOAD' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          <Upload className="w-3 h-3" /> আপলোড
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPhotoInputMode('LINK')}
+                          className={`px-2 py-1 text-[10px] rounded-md transition-colors flex items-center gap-1 ${photoInputMode === 'LINK' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          <LinkIcon className="w-3 h-3" /> লিংক
+                        </button>
+                      </div>
+                    </div>
                     <p className="text-[11px] text-slate-400">
-                      আপনার Facebook Profile-এ বর্তমানে যে Profile Picture ব্যবহার করছেন, সম্ভব হলে সেই একই ছবি দিন।
+                      আপনার Facebook Profile-এ বর্তমানে যে Profile Picture ব্যবহার করছেন, ঠিক সেই আসল ছবিটি দিন।
                     </p>
                     <div className="flex items-center gap-3">
                       <img
                         src={
-                          profilePhotoUrl.trim() ||
-                          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'
+                          profilePhotoFile
+                            ? URL.createObjectURL(profilePhotoFile)
+                            : (profilePhotoUrl.trim() || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80')
                         }
                         alt="Preview"
                         referrerPolicy="no-referrer"
                         className="w-12 h-12 rounded-xl object-cover border border-slate-700 shrink-0 bg-slate-900"
                       />
-                      <input
-                        type="url"
-                        value={profilePhotoUrl}
-                        onChange={(e) => setProfilePhotoUrl(e.target.value)}
-                        placeholder="https://... (ইমেজ বা ছবি লিংক)"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
-                      />
+                      {photoInputMode === 'UPLOAD' ? (
+                        <div className="relative w-full">
+                          <input
+                            type="file"
+                            accept="image/jpeg, image/png, image/webp"
+                            ref={fileInputRef}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                setProfilePhotoFile(e.target.files[0]);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 hover:border-cyan-500/50 transition flex items-center justify-center gap-2"
+                          >
+                            <Upload className="w-4 h-4 text-cyan-500" />
+                            {profilePhotoFile ? profilePhotoFile.name : 'ছবি নির্বাচন করুন...'}
+                          </button>
+                        </div>
+                      ) : (
+                        <input
+                          type="url"
+                          value={profilePhotoUrl}
+                          onChange={(e) => setProfilePhotoUrl(e.target.value)}
+                          placeholder="https://... (ইমেজ বা ছবি লিংক)"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                        />
+                      )}
                     </div>
                   </div>
 
-                  {/* Field 2 & 3: Real Name and Username */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Field 2: Facebook Original Name */}
+                  <div className="space-y-4">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
-                        ২. পূর্ণ নাম (Real Name) *
+                        ২. Facebook Original Name *
                       </label>
                       <input
                         type="text"
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="Facebook-এর আসল নাম"
+                        placeholder="MD SHIHAB KHAN"
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
                       />
                       <span className="text-[10px] text-slate-500 block mt-1">
-                        বানান পরিবর্তন বা ডাকনাম নয়
+                        আপনার Facebook profile-এ যে Original Name আছে, হুবহু সেটিই দিন। Nickname ব্যবহার করবেন না।
                       </span>
                     </div>
 
+                    {/* Field 3: Facebook Profile Link */}
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
-                        ৩. ইউনিক ইউজারনেম (Username) *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        placeholder="যেমন: Shihab_Vai"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
-                      />
-                      <span className="text-[10px] text-slate-500 block mt-1">
-                        SLB প্ল্যাটফর্মের নিজস্ব ইউজারনেম
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Field 4 & 5: Facebook Name and Profile URL */}
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
-                        ৪. Original Facebook Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={facebookName}
-                        onChange={(e) => setFacebookName(e.target.value)}
-                        placeholder="Facebook-এর নাম যেমন আছে"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
-                        ৫. Facebook Profile Link *
+                        ৩. Facebook Profile Link *
                       </label>
                       <input
                         type="url"
@@ -354,6 +553,9 @@ export const LoginPage: React.FC = () => {
                         placeholder="https://www.facebook.com/your_profile"
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
                       />
+                      <span className="text-[10px] text-slate-500 block mt-1 mb-1">
+                        শুধু Facebook Profile URL দিন। Post/share URL গ্রহণ করবে না।
+                      </span>
                       {fbValidation && (
                         <div className="mt-1.5 text-xs">
                           {fbValidation.valid ? (
@@ -374,26 +576,95 @@ export const LoginPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Email Address */}
+              {/* Admin Invite Fields */}
+              {mode === 'INVITE_TOKEN' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {!inviteData ? (
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+                        Invite Token *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={inviteToken}
+                        onChange={(e) => setInviteToken(e.target.value)}
+                        placeholder="Admin থেকে পাওয়া টোকেন দিন"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-3.5 bg-slate-900/50 rounded-xl border border-slate-800">
+                        <p className="text-xs text-slate-400 mb-1">একাউন্ট নিশ্চিত করা হয়েছে:</p>
+                        <p className="text-sm text-white font-bold">{inviteData.member_number}</p>
+                        <p className="text-xs text-slate-300">{inviteData.facebook_name}</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+                          New Password *
+                        </label>
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="কমপক্ষে ৬ অক্ষর"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 transition"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+                          Confirm Password *
+                        </label>
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          required
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="পুনরায় পাসওয়ার্ড দিন"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 transition"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Email Address / Member ID */}
+              {(mode === 'LOGIN' || mode === 'REGISTER' || mode === 'FORGOT_PASSWORD') && (
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
-                  Email Address *
+                  {mode === 'LOGIN' ? 'Email অথবা Member ID *' : 'Email Address *'}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your.email@example.com"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
-                  />
+                  {mode === 'LOGIN' ? (
+                    <input
+                      type="text"
+                      required
+                      value={loginIdentifier}
+                      onChange={(e) => setLoginIdentifier(e.target.value)}
+                      placeholder="email@example.com বা SLB-001"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                    />
+                  ) : (
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="your.email@example.com"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                    />
+                  )}
                 </div>
               </div>
+              )}
 
               {/* Password */}
-              {mode !== 'FORGOT_PASSWORD' && (
+              {(mode === 'LOGIN' || mode === 'REGISTER') && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
                     Password *
@@ -473,23 +744,37 @@ export const LoginPage: React.FC = () => {
                   'লগইন করুন'
                 ) : mode === 'REGISTER' ? (
                   'অ্যাকাউন্ট রেজিস্টার করুন'
+                ) : mode === 'INVITE_TOKEN' ? (
+                  !inviteData ? 'টোকেন ভেরিফাই করুন' : 'পাসওয়ার্ড সেট করুন'
                 ) : (
                   'রিসেট লিংক পাঠান'
                 )}
               </button>
 
-              <div className="pt-4 border-t border-slate-800/80 text-center text-xs text-slate-400">
+              <div className="pt-4 border-t border-slate-800/80 text-center text-xs text-slate-400 space-y-3">
                 {mode === 'LOGIN' ? (
-                  <p>
-                    অ্যাকাউন্ট নেই?{' '}
-                    <button
-                      type="button"
-                      onClick={() => handleModeSwitch('REGISTER')}
-                      className="text-cyan-400 font-bold hover:underline"
-                    >
-                      নতুন অ্যাকাউন্ট তৈরি করুন
-                    </button>
-                  </p>
+                  <>
+                    <p>
+                      অ্যাকাউন্ট নেই?{' '}
+                      <button
+                        type="button"
+                        onClick={() => handleModeSwitch('REGISTER')}
+                        className="text-cyan-400 font-bold hover:underline"
+                      >
+                        নতুন অ্যাকাউন্ট তৈরি করুন
+                      </button>
+                    </p>
+                    <p>
+                      Admin Invite আছে?{' '}
+                      <button
+                        type="button"
+                        onClick={() => handleModeSwitch('INVITE_TOKEN')}
+                        className="text-cyan-400 font-bold hover:underline"
+                      >
+                        Token দিয়ে জয়েন করুন
+                      </button>
+                    </p>
+                  </>
                 ) : (
                   <p>
                     ইতিমধ্যে অ্যাকাউন্ট আছে?{' '}

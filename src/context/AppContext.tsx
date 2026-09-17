@@ -68,9 +68,6 @@ interface AppContextType {
     email: string;
     pass: string;
     name: string;
-    realName?: string;
-    username: string;
-    facebookName: string;
     facebookUrl: string;
     profilePhotoUrl?: string;
     facebookIdentityKey?: string;
@@ -649,26 +646,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     email: string;
     pass: string;
     name: string;
-    realName?: string;
-    username: string;
-    facebookName: string;
     facebookUrl: string;
     profilePhotoUrl?: string;
     facebookIdentityKey?: string;
     facebookIdentityType?: 'numeric_id' | 'username';
   }) => {
-    const isSpecialDev =
-      data.email.trim().toLowerCase() === 'muradshihab516@gmail.com' ||
-      data.email.trim().toLowerCase() === 'supportlinkbox@gmail.com';
-
     if (isSupabaseConfigured) {
       const res = await authApi.signUp({
         email: data.email,
         password: data.pass,
         name: data.name,
-        realName: data.realName,
-        username: data.username,
-        facebookName: data.facebookName,
         facebookUrl: data.facebookUrl,
         profilePhotoUrl: data.profilePhotoUrl,
         facebookIdentityKey: data.facebookIdentityKey,
@@ -707,27 +694,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Live Preview fallback mode
     const existing = members.find(
-      (m) =>
-        m.email.toLowerCase() === data.email.toLowerCase() ||
-        m.username.toLowerCase() === data.username.toLowerCase()
+      (m) => m.email.toLowerCase() === data.email.toLowerCase()
     );
     if (existing) {
-      return { success: false, error: 'এই Email বা Username দিয়ে ইতিমধ্যে অ্যাকাউন্ট রয়েছে।' };
+      return { success: false, error: 'এই Email দিয়ে ইতিমধ্যে অ্যাকাউন্ট রয়েছে।' };
     }
 
     const newNumber = `SLB-${100 + members.length + 1}`;
     const newProfile: MemberProfile = {
       id: `user-${Date.now()}`,
-      member_number: isSpecialDev ? 'SLB-001' : newNumber,
+      member_number: newNumber,
       name: data.name.trim(),
-      real_name: (data.realName || data.name).trim(),
-      username: data.username.trim(),
-      username_normalized: data.username.trim().toLowerCase(),
       email: data.email.trim().toLowerCase(),
-      role: isSpecialDev ? 'DEVELOPER' : 'MEMBER',
-      status: isSpecialDev ? 'ACTIVE' : 'PENDING',
-      facebook_name: data.facebookName.trim(),
-      facebook_name_original: data.facebookName.trim(),
+      role: 'MEMBER',
+      status: 'PENDING',
       facebook_url: data.facebookUrl.trim(),
       facebook_profile_url: data.facebookUrl.trim(),
       facebook_identity_key: data.facebookIdentityKey,
@@ -735,23 +715,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       profile_photo_url:
         data.profilePhotoUrl ||
         `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
-      points: isSpecialDev ? 1500 : 0,
-      weekly_points: isSpecialDev ? 120 : 0,
-      total_links_submitted: isSpecialDev ? 150 : 0,
-      total_supports_given: isSpecialDev ? 2500 : 0,
-      total_all_done: isSpecialDev ? 150 : 0,
+      points: 0,
+      weekly_points: 0,
+      total_links_submitted: 0,
+      total_supports_given: 0,
+      total_all_done: 0,
       community: 'Support Link Box Official',
       joined_at: new Date().toISOString(),
       last_active_at: new Date().toISOString(),
-      is_verified: isSpecialDev,
+      is_verified: false,
     };
 
     setMembers((prev) => [...prev, newProfile]);
-
-    if (isSpecialDev) {
-      setCurrentUser(newProfile);
-      return { success: true, message: 'Developer অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে।' };
-    }
 
     return {
       success: true,

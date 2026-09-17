@@ -28,6 +28,8 @@ import { MemberProfile, UserRole, MemberStatus } from '../../types';
 import { MemberDetailsModal } from './MemberDetailsModal';
 import { MemberActionConfirmModal, ActionModalState } from './MemberActionConfirmModal';
 import { formatToBDT } from '../../utils/bangladeshTime';
+import { AdminInviteMember } from './AdminInviteMember';
+import { AdminInviteList } from './AdminInviteList';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -44,7 +46,7 @@ export const AdminDashboard: React.FC = () => {
     updateMemberStatus,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'OVERVIEW'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'OVERVIEW' | 'INVITE'>('REQUESTS');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -64,7 +66,6 @@ export const AdminDashboard: React.FC = () => {
     return members.filter((m) => {
       const matchesSearch =
         m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.member_number.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -88,7 +89,7 @@ export const AdminDashboard: React.FC = () => {
       type: 'APPROVE',
       target,
       title: 'সদস্য অনুমোদন (Approve Registration)',
-      message: `আপনি কি ${target.name} (${target.username})-এর রেজিস্ট্রেশন অনুমোদন করে অ্যাকাউন্টটি Active করতে চান?`,
+      message: `আপনি কি ${target.name} (${target.member_number})-এর রেজিস্ট্রেশন অনুমোদন করে অ্যাকাউন্টটি Active করতে চান?`,
       confirmBtnText: 'অনুমোদন করুন (Approve)',
       isDanger: false,
       requiresReason: false,
@@ -101,7 +102,7 @@ export const AdminDashboard: React.FC = () => {
       type: 'REJECT',
       target,
       title: 'রেজিস্ট্রেশন বাতিল (Reject Registration)',
-      message: `আপনি কি ${target.name} (${target.username})-এর রেজিস্ট্রেশন আবেদন বাতিল করতে চান?`,
+      message: `আপনি কি ${target.name} (${target.member_number})-এর রেজিস্ট্রেশন আবেদন বাতিল করতে চান?`,
       warning: 'আবেদন বাতিল করা হলে এই ব্যবহারকারী সিস্টেমে লগইন করতে পারবেন না।',
       confirmBtnText: 'বাতিল করুন (Reject)',
       isDanger: true,
@@ -258,6 +259,16 @@ export const AdminDashboard: React.FC = () => {
         >
           <span>Operational Overview (সারসংক্ষেপ)</span>
         </button>
+        <button
+          onClick={() => setActiveTab('INVITE')}
+          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+            activeTab === 'INVITE'
+              ? 'border-cyan-500 text-cyan-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <span>Admin Invite (নতুন সদস্য)</span>
+        </button>
       </div>
 
       {/* TAB 1: REGISTRATION REQUESTS */}
@@ -290,8 +301,8 @@ export const AdminDashboard: React.FC = () => {
                       />
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm font-bold text-white">{member.real_name || member.name}</h3>
-                          <span className="text-xs text-cyan-400 font-mono">@{member.username}</span>
+                          <h3 className="text-sm font-bold text-white">{member.name}</h3>
+                          <span className="text-xs text-cyan-400 font-mono">{member.member_number}</span>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                             PENDING APPROVAL
                           </span>
@@ -448,7 +459,7 @@ export const AdminDashboard: React.FC = () => {
                               </span>
                             </div>
                             <div className="text-[11px] text-slate-500 font-mono">
-                              @{member.username} • {member.email}
+                              {member.email}
                             </div>
                           </div>
                         </div>
@@ -504,6 +515,14 @@ export const AdminDashboard: React.FC = () => {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: ADMIN INVITE */}
+      {activeTab === 'INVITE' && (
+        <div className="space-y-6">
+          <AdminInviteMember />
+          <AdminInviteList />
         </div>
       )}
 

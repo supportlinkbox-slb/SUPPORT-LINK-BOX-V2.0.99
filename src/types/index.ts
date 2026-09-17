@@ -11,9 +11,6 @@ export interface MemberProfile {
   auth_user_id?: string; // auth.users.id reference
   member_number: string; // e.g. "SLB-101"
   name: string;
-  real_name?: string;
-  username: string;
-  username_normalized?: string;
   email: string;
   role: UserRole;
   status: MemberStatus;
@@ -37,6 +34,9 @@ export interface MemberProfile {
   is_verified?: boolean;
   approved_at?: string;
   approved_by?: string;
+  failed_attempts?: number;
+  locked_until?: string;
+  last_failed_at?: string;
 }
 
 export interface ApiResponse<T = any> {

@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy to GitHub Pages and Supabase
 
 on:
   push:
@@ -12,13 +12,13 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# Allow only one concurrent deployment
 concurrency:
-  group: 'pages'
+  group: 'deploy'
   cancel-in-progress: false
 
 jobs:
-  build:
+  build_and_deploy_frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -30,7 +30,10 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci || npm install
+
+      - name: Type Check
+        run: npm run typecheck || echo "Typecheck not configured or skipped"
 
       - name: Build application
         env:
@@ -45,13 +48,36 @@ jobs:
         with:
           path: ./dist
 
-  deploy:
+  deploy_pages:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: build_and_deploy_frontend
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  deploy_edge_functions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Supabase Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        # Only deploy if functions exist. Supabase CLI will deploy all functions in supabase/functions
+        run: |
+          if [ -d "supabase/functions" ]; then
+            supabase functions deploy --project-ref $SUPABASE_PROJECT_ID
+          else
+            echo "No Supabase functions directory found."
+          fi

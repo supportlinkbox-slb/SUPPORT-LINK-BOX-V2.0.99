@@ -127,9 +127,6 @@ export const authApi = {
     email: string;
     password: string;
     name: string;
-    realName?: string;
-    username: string;
-    facebookName?: string;
     facebookUrl?: string;
     profilePhotoUrl?: string;
     facebookIdentityKey?: string;
@@ -150,23 +147,27 @@ export const authApi = {
         return { success: false, error: 'আরও শক্তিশালী Password দিন (কমপক্ষে ৬ অক্ষর)।' };
       }
 
+      // 1. Get atomic member number using RPC
+      const { data: memberNumber, error: seqError } = await supabase.rpc('generate_member_number_secure');
+      if (seqError) {
+        console.error('Member number generation error:', seqError);
+        return { success: false, error: 'Member Number তৈরি করতে সমস্যা হয়েছে।' };
+      }
+
+      // 2. Perform Supabase Auth SignUp
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: params.password,
         options: {
           data: {
+            member_number: memberNumber,
             name: params.name.trim(),
-            real_name: (params.realName || params.name).trim(),
-            username: params.username.trim().toLowerCase(),
-            username_normalized: params.username.trim().toLowerCase(),
-            facebook_name: params.facebookName?.trim(),
-            facebook_name_original: params.facebookName?.trim(),
             facebook_url: params.facebookUrl?.trim(),
             facebook_profile_url: params.facebookUrl?.trim(),
-            profile_photo_url: params.profilePhotoUrl?.trim(),
-            avatar_path: params.profilePhotoUrl?.trim(),
-            facebook_identity_key: params.facebookIdentityKey?.trim(),
+            facebook_identity_key: params.facebookIdentityKey,
             facebook_identity_type: params.facebookIdentityType,
+            profile_photo_url: params.profilePhotoUrl?.trim(),
+            status: 'PENDING',
           },
         },
       });
@@ -307,45 +308,31 @@ export const membersApi = {
         // Fallback to direct database query
       }
 
-      // 2. Direct Database REST Query (Authoritative query on public.members)
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData?.user) {
         return { success: false, error: 'ইউজার লগইন সেশন পাওয়া যায়নি।' };
       }
-
+      
       const user = authData.user;
       const userEmail = (user.email || '').toLowerCase().trim();
 
-      // 2a. Query by auth_user_id
-      let memberRecord: any = null;
-      const { data: byAuthId, error: authIdErr } = await supabase
+      // Check if developer email to trigger secure claim
+      if (userEmail === 'muradshihab516@gmail.com' || userEmail === 'supportlinkbox@gmail.com') {
+        try { await supabase.rpc('claim_seeded_developer'); } catch {}
+      } else {
+        // Try to bind orphan profile for regular members securely
+        try { await supabase.rpc('ensure_my_member_profile'); } catch {}
+      }
+
+      // Fetch the profile strictly by auth_user_id
+      const { data: profile, error: dbErr } = await supabase
         .from('members')
         .select('*')
         .eq('auth_user_id', user.id)
         .maybeSingle();
 
-      if (!authIdErr && byAuthId) {
-        memberRecord = byAuthId;
-      } else if (userEmail) {
-        // 2b. Query by email to link pre-seeded database record
-        const { data: byEmail, error: emailErr } = await supabase
-          .from('members')
-          .select('*')
-          .ilike('email', userEmail)
-          .maybeSingle();
-
-        if (!emailErr && byEmail) {
-          memberRecord = byEmail;
-          // Associate auth_user_id strictly for this member
-          await supabase
-            .from('members')
-            .update({ auth_user_id: user.id })
-            .eq('id', byEmail.id);
-        }
-      }
-
-      if (memberRecord) {
-        return { success: true, data: memberRecord as MemberProfile };
+      if (!dbErr && profile) {
+        return { success: true, data: profile as MemberProfile };
       }
 
       return {
