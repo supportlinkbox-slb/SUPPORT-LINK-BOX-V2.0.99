@@ -1,5 +1,3 @@
--- ADMIN INVITE TOKEN SYSTEM MIGRATION
-
 BEGIN;
 
 -- 1. Create Invite Tokens table dynamically based on members.id type
@@ -7,7 +5,6 @@ DO $$
 DECLARE
   v_id_type TEXT;
 BEGIN
-  -- Inspect the data type of members.id
   SELECT data_type INTO v_id_type
   FROM information_schema.columns
   WHERE table_schema = 'public' AND table_name = 'members' AND column_name = 'id';
@@ -16,7 +13,6 @@ BEGIN
     RAISE EXCEPTION 'members table or id column not found';
   END IF;
 
-  -- Create table safely (EXECUTE format needs escaped quotes for string literals)
   EXECUTE format('
     CREATE TABLE IF NOT EXISTS public.invite_tokens (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -33,65 +29,43 @@ BEGIN
     )
   ', v_id_type, v_id_type);
 
-  -- Index for quick lookups
   CREATE INDEX IF NOT EXISTS idx_invite_token_hash ON public.invite_tokens(token_hash);
   
   -- Enable RLS
-  ALTER TABLE public.invite_tokens ENABLE ROW LEVEL SECURITY;
+  EXECUTE 'ALTER TABLE public.invite_tokens ENABLE ROW LEVEL SECURITY;';
   
-  -- Admins can read all tokens
-  EXECUTE '
-    CREATE POLICY admin_select_invite_tokens ON public.invite_tokens
-    FOR SELECT
-    TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM public.members 
-        WHERE id = auth.uid()::text AND role = ''ADMIN''
-      )
-    )
-  ';
+  -- Drop existing policies if any
+  EXECUTE 'DROP POLICY IF EXISTS admin_all_invite_tokens ON public.invite_tokens;';
+  EXECUTE 'DROP POLICY IF EXISTS admin_select_invite_tokens ON public.invite_tokens;';
+  EXECUTE 'DROP POLICY IF EXISTS admin_update_invite_tokens ON public.invite_tokens;';
   
-  -- Admins can update tokens (e.g. revoke)
+  -- Admin Policy using existing helper function
   EXECUTE '
-    CREATE POLICY admin_update_invite_tokens ON public.invite_tokens
-    FOR UPDATE
+    CREATE POLICY admin_all_invite_tokens ON public.invite_tokens
+    FOR ALL
     TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM public.members 
-        WHERE id = auth.uid()::text AND role = ''ADMIN''
-      )
-    )
+    USING (public.is_current_user_admin_or_dev())
   ';
 END $$;
 
--- 2. Synchronize sequence and replace M-0000 with SLB-000
+-- 2. Secure sequence for member_number (SLB-xxx)
 DO $$ 
 DECLARE
   v_max_id INT;
 BEGIN
-  -- Temporarily migrate any exact "M-xxxx" formats to SLB-xxx (preserving numeric value)
-  UPDATE public.members
-  SET member_number = 'SLB-' || lpad(SUBSTRING(member_number FROM 3), 3, '0')
-  WHERE member_number LIKE 'M-%';
-
-  -- Find the maximum numeric part in SLB-xxx
-  SELECT COALESCE(MAX(SUBSTRING(member_number FROM 5)::INT), 0)
+  -- Safe numeric extraction: regexp_replace to get digits only, ignores non-digits
+  SELECT COALESCE(MAX(NULLIF(regexp_replace(member_number, ''\D'', '''', ''g''), '''')::INT), 0)
   INTO v_max_id
-  FROM public.members
-  WHERE member_number LIKE 'SLB-%';
+  FROM public.members;
 
-  -- Create sequence if missing
   CREATE SEQUENCE IF NOT EXISTS public.member_number_seq START 1;
   
-  -- Sync sequence
   IF v_max_id > 0 THEN
     EXECUTE 'ALTER SEQUENCE public.member_number_seq RESTART WITH ' || (v_max_id + 1);
   END IF;
 END $$;
 
--- 3. Replace generator to STRICTLY return SLB-001 format
+-- 3. Replace generator to strictly use the sequence
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -100,16 +74,13 @@ SET search_path = public
 AS $$
 DECLARE
   v_seq INT;
-  v_member_number TEXT;
 BEGIN
   v_seq := nextval('public.member_number_seq');
-  -- Format: SLB-001
-  v_member_number := 'SLB-' || lpad(v_seq::text, 3, '0');
-  RETURN v_member_number;
+  RETURN 'SLB-' || lpad(v_seq::text, 3, '0');
 END;
 $$;
 
--- 4. Secure Anonymous Token Verifier RPC
+-- 4. Minimal Anonymous Token Verifier
 CREATE OR REPLACE FUNCTION public.verify_invite_token(p_raw_token TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -118,52 +89,39 @@ SET search_path = public, extensions
 AS $$
 DECLARE
   v_token record;
-  v_member_number TEXT;
-  v_facebook_name TEXT;
   v_token_hash TEXT;
 BEGIN
-  -- Using pgcrypto digest for SHA-256
   v_token_hash := encode(digest(p_raw_token, 'sha256'), 'hex');
 
   SELECT * INTO v_token
   FROM public.invite_tokens
-  WHERE token_hash = v_token_hash;
+  WHERE token_hash = v_token_hash
+  FOR UPDATE; -- Row lock to prevent concurrent bypass
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('valid', false, 'reason', 'INVALID_OR_EXPIRED');
   END IF;
 
-  -- Rate limit (e.g. 10 attempts max, simple mechanism)
   IF v_token.attempt_count >= 10 THEN
     RETURN jsonb_build_object('valid', false, 'reason', 'RATE_LIMITED');
   END IF;
 
-  IF v_token.expires_at < NOW() THEN
-    UPDATE public.invite_tokens SET status = 'EXPIRED' WHERE id = v_token.id AND status = 'ACTIVE';
+  IF v_token.status != 'ACTIVE' OR v_token.expires_at < NOW() THEN
+    UPDATE public.invite_tokens 
+    SET 
+      status = CASE WHEN v_token.status = 'ACTIVE' AND v_token.expires_at < NOW() THEN 'EXPIRED' ELSE status END,
+      attempt_count = attempt_count + 1, 
+      last_attempt_at = NOW() 
+    WHERE id = v_token.id;
     RETURN jsonb_build_object('valid', false, 'reason', 'INVALID_OR_EXPIRED');
   END IF;
 
-  IF v_token.status != 'ACTIVE' THEN
-    RETURN jsonb_build_object('valid', false, 'reason', 'INVALID_OR_EXPIRED');
-  END IF;
-
-  UPDATE public.invite_tokens 
-  SET attempt_count = attempt_count + 1, last_attempt_at = NOW() 
-  WHERE id = v_token.id;
-
-  -- Safe info only
-  SELECT member_number, facebook_name INTO v_member_number, v_facebook_name 
-  FROM public.members WHERE id = v_token.member_id;
-
-  RETURN jsonb_build_object(
-    'valid', true,
-    'member_number', v_member_number,
-    'facebook_name', v_facebook_name
-  );
+  -- Success: Do not return sensitive info, do not increment attempt count
+  RETURN jsonb_build_object('valid', true);
 END;
 $$;
 
-
+-- 5. Hardened Auth Trigger
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -174,20 +132,13 @@ DECLARE
     v_norm_email VARCHAR(150);
     v_existing_member record;
     v_member_num TEXT;
-    v_initial_role TEXT := 'MEMBER';
 BEGIN
     v_norm_email := LOWER(TRIM(NEW.email));
 
-    -- Developer hardcodes (if any)
-    IF v_norm_email = 'supportlinkbox@gmail.com' THEN
-        v_initial_role := 'DEVELOPER';
-    END IF;
-
-    -- 1. Check if member already exists (e.g., from Admin Invite Token system)
+    -- Strict Invite Linking: check if member exists (created by admin) and lacks auth_user_id
     SELECT * INTO v_existing_member FROM public.members WHERE email = v_norm_email AND auth_user_id IS NULL LIMIT 1;
     
     IF FOUND THEN
-        -- Link existing member to this auth user
         UPDATE public.members
         SET auth_user_id = NEW.id
         WHERE id = v_existing_member.id;
@@ -195,14 +146,14 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- 2. Normal Public Registration Flow
-    -- We use the new secure sequence for member_number
+    -- Normal Public Registration Flow
     v_member_num := public.generate_member_number_secure();
 
     INSERT INTO public.members (
         auth_user_id,
         member_number,
         name,
+        username,
         email,
         role,
         status,
@@ -215,11 +166,12 @@ BEGIN
         profile_photo_url
     ) VALUES (
         NEW.id,
-        COALESCE(NEW.raw_user_meta_data->>'member_number', v_member_num),
-        COALESCE(NEW.raw_user_meta_data->>'name', split_part(v_norm_email, '@', 1)),
+        v_member_num,  -- Strictly enforced, client metadata ignored
+        COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'name'), ''), split_part(v_norm_email, '@', 1)),
+        COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''), split_part(v_norm_email, '@', 1) || '_' || substr(md5(random()::text), 1, 4)),
         v_norm_email,
-        v_initial_role,
-        COALESCE(NEW.raw_user_meta_data->>'status', 'PENDING'),
+        'MEMBER',  -- Strictly enforced
+        'PENDING', -- Strictly enforced
         NEW.raw_user_meta_data->>'facebook_name',
         NEW.raw_user_meta_data->>'facebook_name_original',
         NEW.raw_user_meta_data->>'facebook_url',
@@ -232,4 +184,5 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
 COMMIT;

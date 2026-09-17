@@ -30,7 +30,7 @@ serve(async (req) => {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const tokenHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-    // 2. Fetch token and member
+    // 2. Pre-flight check (fail early without lock)
     const { data: tokenRecord, error: tokenError } = await supabaseAdmin
       .from('invite_tokens')
       .select('id, member_id, status, expires_at')
@@ -39,8 +39,7 @@ serve(async (req) => {
 
     if (tokenError || !tokenRecord) throw new Error('INVALID_OR_EXPIRED');
 
-    if (tokenRecord.status !== 'ACTIVE' || new Date(tokenRecord.expires_at) < new Date()) {
-       await supabaseAdmin.from('invite_tokens').update({ status: 'EXPIRED' }).eq('id', tokenRecord.id);
+    if (tokenRecord.status !== 'ACTIVE' || new Date(tokenRecord.expires_at) < new Date()) { 
        throw new Error('INVALID_OR_EXPIRED');
     }
 
@@ -50,50 +49,42 @@ serve(async (req) => {
       .eq('id', tokenRecord.member_id)
       .single();
 
-    if (memberError || !member) throw new Error('Member not found');
-    if (member.auth_user_id) throw new Error('Account already setup');
+    if (memberError || !member) throw new Error('MEMBER_NOT_FOUND');
+    if (member.auth_user_id) throw new Error('ALREADY_LINKED');
 
-    // 3. Create Supabase Auth User (auto-confirmed since it's an admin invite)
+    // 3. Create Supabase Auth User (Bypasses handle_new_user using metadata)
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: member.email,
       password: password,
-      email_confirm: true // Bypass email confirm since they got it via a secure channel
+      email_confirm: true,
+      user_metadata: { is_invite_consumption: 'true' }
     });
 
     if (authError) {
-      // If it says already exists, we might need to handle it or block.
       throw new Error('Failed to create auth user: ' + authError.message);
     }
 
-    // 4. Update member and token in parallel
-    const { error: updateError } = await supabaseAdmin
-      .from('members')
-      .update({
-        auth_user_id: authUser.user.id
-        // Keep status PENDING as required by constraints
-      })
-      .eq('id', member.id);
+    // 4. Execute Row-Locked Safe Transaction via RPC
+    const { data: txResult, error: txError } = await supabaseAdmin.rpc('consume_invite_token_tx', {
+      p_token_hash: tokenHash,
+      p_auth_uid: authUser.user.id
+    });
 
-    if (updateError) {
-       // Cleanup orphaned auth user on fail
+    if (txError || !txResult.success) {
+       // Rollback Auth User if token was consumed concurrently
        await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
-       throw updateError;
+       throw new Error(txResult?.reason || 'Transaction failed');
     }
 
-    await supabaseAdmin
-      .from('invite_tokens')
-      .update({ status: 'USED', used_at: new Date().toISOString() })
-      .eq('id', tokenRecord.id);
-
-    // Audit
+    // 5. Audit
     await supabaseAdmin.from('audit_logs').insert({
-      actor_id: member.id, // We just mapped it
+      actor_id: member.id,
       actor_name: member.id,
       actor_role: 'MEMBER',
       action: 'INVITE_CONSUMED',
       target_type: 'member',
       target_member_id: member.id,
-      details: 'Consumed invite token and set password'
+      details: 'Consumed invite token securely and linked identity'
     });
 
     return new Response(JSON.stringify({ success: true }), {

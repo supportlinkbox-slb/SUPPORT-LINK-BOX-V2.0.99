@@ -17,7 +17,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     );
-
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -53,7 +52,7 @@ serve(async (req) => {
       .eq('facebook_identity_type', facebookIdentityType)
       .maybeSingle();
 
-    if (existingFB) throw new Error('DUPLICATE_FACEBOOK');
+    if (existingFB) throw new Error('DUPLICATE_FACEBOOK_IDENTITY');
 
     const { data: existingEmail } = await supabaseAdmin
       .from('members')
@@ -74,6 +73,7 @@ serve(async (req) => {
         member_number: memberNumber,
         email: email,
         name: facebookName,
+        username: email.split('@')[0] + '_' + Math.random().toString(36).substring(2, 6),
         facebook_name: facebookName,
         facebook_name_original: facebookName,
         facebook_url: facebookUrl,
@@ -125,7 +125,7 @@ serve(async (req) => {
       action: 'INVITE_CREATED',
       target_type: 'member',
       target_member_id: newMember.id,
-      details: 'Created invite token for ' + email
+      details: 'Created secure invite token for ' + email
     });
 
     return new Response(JSON.stringify({ success: true, rawToken, memberNumber }), {

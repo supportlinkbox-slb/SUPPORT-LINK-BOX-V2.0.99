@@ -73,6 +73,7 @@ export const LoginPage: React.FC = () => {
 
   const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN'>('LOGIN');
   const [inviteToken, setInviteToken] = useState('');
+  const [inviteTokenHash, setInviteTokenHash] = useState('');
   const [inviteData, setInviteData] = useState<{ member_number?: string; facebook_name?: string } | null>(null);
   const [loginIdentifier, setLoginIdentifier] = useState(''); // Used for Email or Member ID
   const [email, setEmail] = useState(''); // Used for Registration
@@ -114,26 +115,39 @@ export const LoginPage: React.FC = () => {
     setInviteData(null);
   };
 
-  const handleVerifyInvite = async () => {
-    if (!inviteToken.trim()) {
-      setErrorMsg('টোকেন প্রদান করুন।');
+    const handleVerifyInvite = async () => {
+    const trimmedToken = inviteToken.trim();
+    if (!trimmedToken) {
+      setErrorMsg('ইনভাইট টোকেন প্রদান করুন।');
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.rpc('verify_invite_token', { p_raw_token: inviteToken.trim() });
+    try {
+      // Hash the token on client side using Web Crypto API to ensure RAW token never goes in request body
+      const encoder = new TextEncoder();
+      const tokenData = encoder.encode(trimmedToken);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', tokenData);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const tokenHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const { data: verifyData, error: verifyError } = await supabase.rpc('verify_invite_token', { p_token_hash: tokenHash });
+      
+      if (verifyError || !verifyData?.valid) {
+        setErrorMsg(verifyData?.reason === 'RATE_LIMITED' ? 'অনেকবার চেষ্টা করা হয়েছে, পরে চেষ্টা করুন।' : 'ইনভাইট টোকেনটি সঠিক নয় বা মেয়াদ শেষ।');
+        setLoading(false);
+        return;
+      }
+      
+      setInviteTokenHash(tokenHash);
+      setSuccessNotice({
+        type: 'REGISTER_SUCCESS',
+        message: 'টোকেন সঠিক। দয়া করে যে ইমেইল দিয়ে ইনভাইট করা হয়েছে সেটি ব্যবহার করে রেজিস্ট্রেশন বা লগইন করুন।'
+      });
+      setMode('REGISTER');
+    } catch (err: any) {
+      setErrorMsg('ভেরিফিকেশন ব্যর্থ হয়েছে।');
+    }
     setLoading(false);
-    
-    if (error) {
-      setErrorMsg('সিস্টেমে সমস্যা হয়েছে, পরে আবার চেষ্টা করুন।');
-      return;
-    }
-    
-    if (data && data.valid) {
-      setInviteData(data);
-      setErrorMsg('');
-    } else {
-      setErrorMsg(data?.reason === 'RATE_LIMITED' ? 'অতিরিক্ত চেষ্টার জন্য ব্লক করা হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।' : 'ইনভ্যালিড বা মেয়াদোত্তীর্ণ টোকেন।');
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,35 +161,7 @@ export const LoginPage: React.FC = () => {
     const isInvite = mode === 'INVITE_TOKEN';
     
     if (isInvite) {
-      if (!inviteData) {
-        await handleVerifyInvite();
-        return;
-      }
-      
-      if (!password || password.length < 6) {
-        setErrorMsg('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setErrorMsg('পাসওয়ার্ড দুটি মিলছে না।');
-        return;
-      }
-      
-      setLoading(true);
-      const { data, error } = await supabase.functions.invoke('consume-invite-token', {
-        body: { rawToken: inviteToken.trim(), password }
-      });
-      setLoading(false);
-      
-      if (error || (data && !data.success)) {
-        setErrorMsg(data?.error || 'পাসওয়ার্ড সেট করতে সমস্যা হয়েছে।');
-      } else {
-        setSuccessNotice({
-          type: 'REGISTRATION_SUCCESS',
-          message: 'পাসওয়ার্ড সফলভাবে সেট হয়েছে! এখন Admin Approval-এর জন্য অপেক্ষা করুন।',
-        });
-        setTimeout(() => handleModeSwitch('LOGIN'), 3000);
-      }
+      await handleVerifyInvite();
       return;
     }
 
@@ -192,43 +178,39 @@ export const LoginPage: React.FC = () => {
       // We send identifier AND password to securely resolve if password is correct
       // This prevents unauthenticated attackers from resolving Member IDs to emails
       // and checking if accounts are locked or not.
-      const { data: secureAuthResult, error: secureAuthError } = await supabase.rpc('secure_login_check', { 
-        p_identifier: trimmedId,
-        p_password: password
-      });
-
-      if (secureAuthError) {
-        console.error('Secure Login Error:', secureAuthError);
+            // 1. Resolve Identifier safely (SLB-xxx -> Email)
+      const { data: resolvedEmail, error: resolveErr } = await supabase.rpc('get_email_by_identifier', { p_identifier: trimmedId });
+      if (resolveErr || !resolvedEmail) {
         setLoading(false);
-        setErrorMsg('সিস্টেমে সমস্যা হয়েছে, পরে আবার চেষ্টা করুন।');
+        setErrorMsg('সঠিক ইমেইল বা মেম্বার আইডি দিন।');
         return;
       }
 
-      if (!secureAuthResult?.success) {
+      // 2. Check 30-min Freeze
+      const { data: statusCheck } = await supabase.rpc('check_login_status', { p_email: resolvedEmail });
+      if (statusCheck && !statusCheck.allowed) {
         setLoading(false);
-        if (secureAuthResult?.error === 'ACCOUNT_LOCKED') {
-          const mins = Math.ceil((secureAuthResult.remaining_seconds || 0) / 60);
-          setErrorMsg(`নিরাপত্তার কারণে আপনার অ্যাকাউন্ট সাময়িকভাবে লক করা হয়েছে। ${mins} মিনিট পরে আবার চেষ্টা করুন।`);
-        } else {
-          setErrorMsg(secureAuthResult?.error || 'ভুল Email/Member ID অথবা Password।');
-        }
+        setErrorMsg(`অ্যাকাউন্ট সাময়িকভাবে লক করা হয়েছে। আবার চেষ্টা করুন: ${new Date(statusCheck.locked_until).toLocaleTimeString()}`);
         return;
       }
 
-      // If we got here, secureAuthResult.success is true and we got the canonical email
-      targetEmail = secureAuthResult.email;
-      
-      const res = await login(targetEmail, password);
+      // 3. Supabase Native Auth login
+      const res = await login(resolvedEmail, password);
       
       if (!res.success) {
         setLoading(false);
-        if (res.error?.includes('Admin Approval') || res.error?.includes('অনুমোদনের অপেক্ষায়')) {
+        if (res.error?.includes('Admin Approval') || res.error?.includes('অনুমোদনের অপেক্ষায়') || res.error?.includes('অপেক্ষায়')) {
           setPendingNotice(res.error);
+        } else if (res.error?.includes('স্থগিত') || res.error?.includes('নিবন্ধিত নেই') || res.error?.includes('অনুমোদিত হয়নি')) {
+          setErrorMsg(res.error);
         } else {
-          setErrorMsg('লগইন করতে সমস্যা হচ্ছে।');
+          await supabase.rpc('record_login_failure', { p_email: resolvedEmail });
+          setErrorMsg('ভুল Email/Member ID অথবা Password।');
         }
         return;
       }
+
+      await supabase.rpc('reset_login_attempts', { p_email: resolvedEmail });
       
       setLoading(false);
       return;
@@ -329,6 +311,7 @@ export const LoginPage: React.FC = () => {
         profilePhotoUrl: finalPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         facebookIdentityKey: fbValidation?.identityKey,
         facebookIdentityType: fbValidation?.identityType,
+        tokenHash: inviteTokenHash || undefined,
       });
       setPassword('');
       setConfirmPassword('');
@@ -449,6 +432,16 @@ export const LoginPage: React.FC = () => {
 
               {/* REGISTER FIELDS (Chapter 03 Section 4) */}
               {mode === 'REGISTER' && (
+                <>
+  <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 space-y-2 mb-4">
+    <p><strong className="text-cyan-400">গুরুত্বপূর্ণ নির্দেশিকা:</strong></p>
+    <ul className="list-disc list-inside space-y-1">
+      <li><strong>Facebook Name:</strong> আপনার অরিজিনাল ফেসবুক প্রোফাইল নাম হুবহু দিতে হবে। (কোনো নিকনেম নয়)</li>
+      <li><strong>Facebook Profile:</strong> শুধু মূল প্রোফাইলের লিংক দিন। (কোনো পোস্ট বা শেয়ার লিংক নয়)</li>
+      <li><strong>Profile Picture:</strong> আপনার বর্তমান ফেসবুক প্রোফাইল পিকচার আপলোড করুন।</li>
+      <li><strong>Approval:</strong> রেজিস্ট্রেশনের পর অ্যাকাউন্ট PENDING থাকবে। অ্যাডমিন অ্যাপ্রুভালের পর লগইন করতে পারবেন।</li>
+    </ul>
+  </div>
                 <div className="space-y-4 animate-in fade-in duration-200">
                   {/* Field 1: Profile Photo */}
                   <div className="p-3.5 bg-slate-950/60 rounded-2xl border border-slate-800 space-y-2">
@@ -574,7 +567,7 @@ export const LoginPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              )}
+                </>)}
 
               {/* Admin Invite Fields */}
               {mode === 'INVITE_TOKEN' && (
