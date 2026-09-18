@@ -100,8 +100,8 @@ export const LoginPage: React.FC = () => {
 
   // Facebook live validation
   const fbValidation = React.useMemo(() => {
-    if (!facebookUrl.trim()) return null;
-    return validateAndExtractFacebookProfile(facebookUrl.trim());
+    if (!(facebookUrl || '').trim()) return null;
+    return validateAndExtractFacebookProfile((facebookUrl || '').trim());
   }, [facebookUrl]);
 
   const handleModeSwitch = (newMode: 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN') => {
@@ -116,7 +116,7 @@ export const LoginPage: React.FC = () => {
   };
 
     const handleVerifyInvite = async () => {
-    const trimmedToken = inviteToken.trim();
+    const trimmedToken = (inviteToken || '').trim();
     if (!trimmedToken) {
       setErrorMsg('ইনভাইট টোকেন প্রদান করুন।');
       return;
@@ -168,7 +168,7 @@ export const LoginPage: React.FC = () => {
     let targetEmail = '';
     
     if (isLogin) {
-      const trimmedId = loginIdentifier.trim();
+      const trimmedId = (loginIdentifier || '').trim();
       if (!trimmedId) {
         setErrorMsg('Email অথবা Member ID প্রদান করুন।');
         return;
@@ -216,7 +216,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedEmail = (email || '').trim().toLowerCase();
     if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setErrorMsg('সঠিক Email Address প্রদান করুন।');
       return;
@@ -240,7 +240,7 @@ export const LoginPage: React.FC = () => {
     }
 
     if (mode === 'REGISTER') {
-      if (photoInputMode === 'LINK' && !profilePhotoUrl.trim()) {
+      if (photoInputMode === 'LINK' && !(profilePhotoUrl || '').trim()) {
         setErrorMsg('প্রোফাইল পিকচার লিংক দিন।');
         return;
       }
@@ -248,12 +248,12 @@ export const LoginPage: React.FC = () => {
         setErrorMsg('প্রোফাইল পিকচার আপলোড করুন।');
         return;
       }
-      if (!name.trim()) {
+      if (!(name || '').trim()) {
         setErrorMsg('আপনার Facebook Original Name প্রদান করুন।');
         return;
       }
-      if (facebookUrl.trim()) {
-        const val = validateAndExtractFacebookProfile(facebookUrl.trim());
+      if ((facebookUrl || '').trim()) {
+        const val = validateAndExtractFacebookProfile((facebookUrl || '').trim());
         if (!val.valid) {
           setErrorMsg(val.error || 'সঠিক ফেসবুক প্রোফাইল লিংক দিন।');
           return;
@@ -275,7 +275,7 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     if (mode === 'REGISTER') {
-      let finalPhotoUrl = profilePhotoUrl.trim();
+      let finalPhotoUrl = (profilePhotoUrl || '').trim();
       
       if (photoInputMode === 'UPLOAD' && profilePhotoFile) {
         try {
@@ -296,18 +296,18 @@ export const LoginPage: React.FC = () => {
           
           finalPhotoUrl = publicUrl;
         } catch (error) {
-          setErrorMsg('ছবি আপলোড করতে সমস্যা হয়েছে। Storage তৈরি আছে কিনা নিশ্চিত করুন অথবা ছবির লিংক ব্যবহার করুন।');
+          setErrorMsg('ছবি আপলোড করতে সমস্যা হয়েছে: ' + (error.message || error) + '. Storage তৈরি আছে কিনা নিশ্চিত করুন অথবা ছবির লিংক ব্যবহার করুন।');
           setLoading(false);
           return;
         }
       }
 
-      const fbValidation = validateAndExtractFacebookProfile(facebookUrl.trim());
+      const fbValidation = validateAndExtractFacebookProfile((facebookUrl || '').trim());
       const res = await register({
         email: trimmedEmail,
         pass: password,
-        name: name.trim(),
-        facebookUrl: facebookUrl.trim(),
+        name: (name || '').trim(),
+        facebookUrl: (facebookUrl || '').trim(),
         profilePhotoUrl: finalPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         facebookIdentityKey: fbValidation?.identityKey,
         facebookIdentityType: fbValidation?.identityType,
@@ -474,7 +474,7 @@ export const LoginPage: React.FC = () => {
                         src={
                           profilePhotoFile
                             ? URL.createObjectURL(profilePhotoFile)
-                            : (profilePhotoUrl.trim() || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80')
+                            : ((profilePhotoUrl || '').trim() || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80')
                         }
                         alt="Preview"
                         referrerPolicy="no-referrer"

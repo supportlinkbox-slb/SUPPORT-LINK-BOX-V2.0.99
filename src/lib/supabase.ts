@@ -162,6 +162,7 @@ export const authApi = {
           data: {
             member_number: memberNumber,
             name: params.name.trim(),
+            facebook_name: params.name.trim(),
             facebook_url: params.facebookUrl?.trim(),
             facebook_profile_url: params.facebookUrl?.trim(),
             facebook_identity_key: params.facebookIdentityKey,

@@ -656,7 +656,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const res = await authApi.signUp({
         email: data.email,
         password: data.pass,
-        facebook_name: data.name,
+        name: data.name,
         facebookUrl: data.facebookUrl,
         profilePhotoUrl: data.profilePhotoUrl,
         facebookIdentityKey: data.facebookIdentityKey,
