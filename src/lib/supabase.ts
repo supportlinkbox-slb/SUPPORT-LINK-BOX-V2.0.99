@@ -7,6 +7,7 @@ import {
   AllDoneRecord,
   AuditLog,
   NoticeItem,
+  AppNotification,
   SystemConfig,
   UserRole,
   MemberStatus,
@@ -17,6 +18,8 @@ import {
   PointTransaction,
   Report,
   ReportReply,
+  LinkReport,
+  ReportStatus,
 } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -203,15 +206,58 @@ export const authApi = {
     }
   },
 
-  async signIn(email: string, password: string): Promise<ApiResponse<{ session: any; user: any }>> {
+  async signIn(identifier: string, password: string): Promise<ApiResponse<{ session: any; user: any }>> {
     try {
       if (!isSupabaseConfigured) {
         return { success: false, error: 'Supabase কনফিগার করা হয়নি।' };
       }
+
+      const trimmedId = (identifier || '').trim();
+      if (!trimmedId) {
+        return { success: false, error: 'Email অথবা Member ID দিন।' };
+      }
+
+      // 1. Invoke server-side auth-login Edge Function for rate limiting, lock check & identity resolution
+      try {
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('auth-login', {
+          body: { identifier: trimmedId, password },
+        });
+
+        if (!fnError && fnData) {
+          if (fnData.success && fnData.data?.session) {
+            const { error: setSessionErr } = await supabase.auth.setSession(fnData.data.session);
+            if (setSessionErr) {
+              return { success: false, error: formatSupabaseError(setSessionErr) };
+            }
+            return { success: true, data: fnData.data };
+          } else if (fnData.success === false && fnData.error) {
+            return { success: false, error: fnData.error };
+          }
+        }
+      } catch (e) {
+        console.warn('Edge Function auth-login unavailable, using direct auth fallback');
+      }
+
+      // 2. Direct Auth Fallback (if Edge Function runtime is unreachable)
+      let targetEmail = trimmedId.toLowerCase();
+      if (!trimmedId.includes('@')) {
+        const { data: member } = await supabase
+          .from('members')
+          .select('email')
+          .ilike('member_number', trimmedId)
+          .maybeSingle();
+
+        if (!member || !member.email) {
+          return { success: false, error: 'ভুল Email/Member ID অথবা Password।' };
+        }
+        targetEmail = member.email.toLowerCase().trim();
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: targetEmail,
         password,
       });
+
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data: { session: data.session, user: data.user } };
     } catch (err: any) {
@@ -325,14 +371,34 @@ export const membersApi = {
         try { await supabase.rpc('ensure_my_member_profile'); } catch {}
       }
 
-      // Fetch the profile strictly by auth_user_id
-      const { data: profile, error: dbErr } = await supabase
+      // Fetch the profile strictly by auth_user_id, with fallback to email matching
+      let { data: profile, error: dbErr } = await supabase
         .from('members')
         .select('*')
         .eq('auth_user_id', user.id)
         .maybeSingle();
 
-      if (!dbErr && profile) {
+      if (!profile && userEmail) {
+        const { data: emailProfile } = await supabase
+          .from('members')
+          .select('*')
+          .ilike('email', userEmail)
+          .maybeSingle();
+
+        if (emailProfile) {
+          try {
+            await supabase
+              .from('members')
+              .update({ auth_user_id: user.id })
+              .eq('id', emailProfile.id);
+          } catch (e) {
+            console.error('Auto-link failed:', e);
+          }
+          profile = { ...emailProfile, auth_user_id: user.id };
+        }
+      }
+
+      if (profile) {
         return { success: true, data: profile as MemberProfile };
       }
 
@@ -964,9 +1030,86 @@ export const configApi = {
       const { data, error } = await supabase
         .from('notices')
         .select('*')
+        .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data: (data || []) as NoticeItem[] };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async generateNoticeSecure(params: {
+    memberId: string;
+    type: string;
+    title: string;
+    content: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    isPinned?: boolean;
+    priority?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: { success: true } };
+      const { data, error } = await supabase.rpc('generate_notice_secure', {
+        p_member_id: params.memberId,
+        p_type: params.type,
+        p_title: params.title,
+        p_content: params.content,
+        p_level: params.level || 'SIMPLE_WARNING',
+        p_days_inactive_filter: params.daysInactiveFilter,
+        p_is_pinned: params.isPinned || false,
+        p_priority: params.priority || 'NORMAL',
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async bulkGenerateNoticesSecure(params: {
+    memberIds: string[];
+    type: string;
+    title: string;
+    contentTemplate: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    priority?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: { success: true, success_count: params.memberIds.length } };
+      const { data, error } = await supabase.rpc('bulk_generate_notices_secure', {
+        p_member_ids: params.memberIds,
+        p_type: params.type,
+        p_title: params.title,
+        p_content_template: params.contentTemplate,
+        p_level: params.level || 'SIMPLE_WARNING',
+        p_days_inactive_filter: params.daysInactiveFilter,
+        p_priority: params.priority || 'NORMAL',
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async revokeNotice(noticeId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: { success: true } };
+      const { data, error } = await supabase.rpc('revoke_notice_secure', {
+        p_notice_id: noticeId,
+      });
+      if (error) {
+        // Fallback to direct update if RPC not yet deployed
+        const { error: updErr } = await supabase
+          .from('notices')
+          .update({ status: 'REVOKED' })
+          .eq('id', noticeId);
+        if (updErr) return { success: false, error: formatSupabaseError(updErr) };
+      }
+      return { success: true, data };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }
@@ -982,6 +1125,66 @@ export const configApi = {
         .limit(50);
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data: (data || []) as AuditLog[] };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+};
+
+/**
+ * NOTIFICATIONS GATEWAY API (Chapter 14)
+ */
+export const notificationsApi = {
+  async getMyNotifications(memberId: string): Promise<ApiResponse<AppNotification[]>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: [] };
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('member_id', memberId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data: (data || []) as AppNotification[] };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async markAsRead(notificationId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: { success: true } };
+      const { data, error } = await supabase.rpc('mark_notification_read_secure', {
+        p_notification_id: notificationId,
+      });
+      if (error) {
+        const { error: updErr } = await supabase
+          .from('notifications')
+          .update({ is_read: true, read_at: new Date().toISOString() })
+          .eq('id', notificationId);
+        if (updErr) return { success: false, error: formatSupabaseError(updErr) };
+      }
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async markAllAsRead(memberId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: { success: true } };
+      const { data, error } = await supabase.rpc('mark_all_notifications_read_secure', {
+        p_member_id: memberId,
+      });
+      if (error) {
+        const { error: updErr } = await supabase
+          .from('notifications')
+          .update({ is_read: true, read_at: new Date().toISOString() })
+          .eq('member_id', memberId)
+          .eq('is_read', false);
+        if (updErr) return { success: false, error: formatSupabaseError(updErr) };
+      }
+      return { success: true, data };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }
@@ -1224,5 +1427,172 @@ export const reportsApi = {
       return { success: false, error: formatSupabaseError(err) };
     }
   },
+
+  async updateReportStatus(reportId: string, newStatus: ReportStatus, adminNotes?: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+      const { data, error } = await supabase.rpc('update_report_status_secure', {
+        p_report_id: reportId,
+        p_new_status: newStatus,
+        p_admin_notes: adminNotes || null,
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async fetchReportsPaginated(params: {
+    status?: string;
+    category?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<
+    ApiResponse<{
+      reports: LinkReport[];
+      totalCount: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    }>
+  > {
+    try {
+      if (!isSupabaseConfigured) {
+        return {
+          success: true,
+          data: {
+            reports: [],
+            totalCount: 0,
+            page: 1,
+            pageSize: params.pageSize || 10,
+            totalPages: 1,
+          },
+        };
+      }
+      const { data, error } = await supabase.rpc('fetch_reports_paginated', {
+        p_status: params.status && params.status !== 'ALL' ? params.status : null,
+        p_category: params.category && params.category !== 'ALL' ? params.category : null,
+        p_search: params.search || null,
+        p_page: params.page || 1,
+        p_page_size: params.pageSize || 10,
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data: data?.data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async uploadScreenshot(file: File, communityId: string = 'main'): Promise<ApiResponse<{ path: string; publicUrl: string }>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+
+      // Section 13: Size & MIME Validation
+      const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+      if (file.size > MAX_SIZE) {
+        return { success: false, error: 'Screenshot Upload করা যায়নি। সর্বোচ্চ ৫ MB ফাইল ব্যবহার করুন।' };
+      }
+
+      const validMimes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+      if (!validMimes.includes(file.type.toLowerCase())) {
+        return { success: false, error: 'কেবলমাত্র PNG, JPG অথবা WEBP ফরম্যাটের ছবি গ্রহণযোগ্য।' };
+      }
+
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `${communityId}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage.from('reports').upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+      if (error) {
+        return { success: false, error: formatSupabaseError(error) };
+      }
+
+      const { data: urlData } = supabase.storage.from('reports').getPublicUrl(data.path);
+      return { success: true, data: { path: data.path, publicUrl: urlData?.publicUrl || data.path } };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
 };
+
+/**
+ * NOTICES & WARNINGS GATEWAY API (Chapter 14)
+ */
+export const noticesApi = {
+  async generateNoticeSecure(params: {
+    memberId: string;
+    type: string;
+    title: string;
+    content: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    isPinned?: boolean;
+    priority?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+      const { data, error } = await supabase.rpc('generate_notice_secure', {
+        p_target_member_id: params.memberId,
+        p_type: params.type,
+        p_title: params.title,
+        p_content: params.content,
+        p_level: params.level || params.type,
+        p_days_inactive_filter: params.daysInactiveFilter || null,
+        p_is_pinned: !!params.isPinned,
+        p_priority: params.priority || 'NORMAL',
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async bulkGenerateNoticesSecure(params: {
+    memberIds: string[];
+    type: string;
+    title: string;
+    contentTemplate: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    priority?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+      const { data, error } = await supabase.rpc('bulk_generate_notices_secure', {
+        p_target_member_ids: params.memberIds,
+        p_type: params.type,
+        p_title: params.title,
+        p_content_template: params.contentTemplate,
+        p_level: params.level || params.type,
+        p_days_inactive_filter: params.daysInactiveFilter || null,
+        p_priority: params.priority || 'NORMAL',
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async revokeNotice(noticeId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+      const { data, error } = await supabase.rpc('revoke_notice_secure', {
+        p_notice_id: noticeId,
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+};
+
+
 

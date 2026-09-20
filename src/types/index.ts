@@ -1,6 +1,6 @@
 export type UserRole = 'DEVELOPER' | 'ADMIN' | 'MEMBER';
 
-export type MemberStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'INACTIVE' | 'FROZEN' | 'SUSPENDED' | 'REMOVED';
+export type MemberStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'INACTIVE' | 'FROZEN' | 'SUSPENDED' | 'REMOVED' | 'BANNED';
 
 export type PostType = 'Photo' | 'Video';
 
@@ -229,6 +229,12 @@ export interface PointTransaction {
 }
 
 export type ReportCategory =
+  | 'LINK_NOT_WORKING'
+  | 'COMMENTS_DISABLED'
+  | 'POST_NOT_PUBLIC'
+  | 'REACTION_COMMENT_DISABLED'
+  | 'ADULT_POST'
+  | 'POLITICAL_POST'
   | 'link_not_working'
   | 'comments_disabled'
   | 'post_not_public'
@@ -239,8 +245,23 @@ export type ReportCategory =
 
 export type ReportStatus = 'PENDING' | 'IN_DISCUSSION' | 'RESOLVED' | 'DISMISSED';
 
+export interface ReportEvidence {
+  id: string;
+  report_id: string;
+  community_id?: string;
+  storage_bucket: string;
+  storage_path: string;
+  original_filename?: string;
+  mime_type?: string;
+  file_size?: number;
+  uploaded_by: string;
+  created_at: string;
+}
+
 export interface LinkReport {
   id: string;
+  report_serial_display?: string;
+  community_id?: string;
   link_id: string;
   link_serial: number;
   link_owner_id: string;
@@ -254,7 +275,12 @@ export interface LinkReport {
   created_at: string;
   updated_at: string;
   admin_notes?: string;
+  resolved_at?: string;
+  resolved_by?: string;
+  dismissed_at?: string;
+  dismissed_by?: string;
   messages?: ReportMessage[];
+  evidence?: ReportEvidence[];
 }
 
 export interface ReportMessage {
@@ -267,7 +293,12 @@ export interface ReportMessage {
   created_at: string;
 }
 
-export type NoticeType = 'SIMPLE_WARNING' | 'ALERT_WARNING' | 'KICKOUT_WARNING' | 'GENERAL_ANNOUNCEMENT';
+export type NoticeType =
+  | 'SIMPLE_WARNING'
+  | 'ALERT_WARNING'
+  | 'KICKOUT_WARNING'
+  | 'KICKOUT_NOTICE'
+  | 'GENERAL_ANNOUNCEMENT';
 
 export interface NoticeItem {
   id: string;
@@ -276,10 +307,45 @@ export interface NoticeItem {
   type: NoticeType;
   created_at: string;
   created_by_name: string;
+  created_by_id?: string;
   target_role?: UserRole | 'ALL';
+  target_member_id?: string;
   target_member_ids?: string[];
   days_inactive_filter?: number;
+  exact_inactive_days?: number;
   is_pinned: boolean;
+  status?: 'ACTIVE' | 'ARCHIVED' | 'REVOKED';
+  priority?: 'NORMAL' | 'IMPORTANT' | 'URGENT' | 'HIGH';
+  level?: string;
+}
+
+export type NotificationType =
+  | 'ANNOUNCEMENT'
+  | 'NOTICE'
+  | 'NOTICE_SIMPLE'
+  | 'NOTICE_ALERT'
+  | 'NOTICE_KICKOUT'
+  | 'WARNING'
+  | 'ALERT_WARNING'
+  | 'FAKE_ALL_DONE'
+  | 'PENALTY_ISSUED'
+  | 'RECOVERY'
+  | 'SPECIAL_SUPPORT_DUTY'
+  | 'FAKE_ALL_DONE_PENALTY'
+  | 'ADMIN_MESSAGE'
+  | 'SYSTEM';
+
+export interface AppNotification {
+  id: string;
+  member_id: string;
+  community_id?: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  reference_id?: string;
+  is_read: boolean;
+  read_at?: string;
+  created_at: string;
 }
 
 export interface PunishmentRecord {
@@ -420,7 +486,7 @@ export interface SystemConfig {
   recovery_end_time: string; // "10:00"
   max_links_per_member: number;
   fastest_bonus_prizes: number[]; // [10, 8, 6, 4, 2]
-  base_all_done_points: number; // 3
+  base_all_done_points: number; // 5
   community_name: string;
   timezone: string; // "Asia/Dhaka" (BDT = UTC+6)
 }

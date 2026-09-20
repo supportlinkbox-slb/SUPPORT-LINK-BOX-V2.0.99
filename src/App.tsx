@@ -59,7 +59,7 @@ function MainContent() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Active Special Support Duty Warning (if penalized) */}
-        <SpecialSupportDutyBanner />
+        <SpecialSupportDutyBanner onGoToSupport={() => setCurrentTab('support')} />
 
         {/* Tab Routing */}
         {currentTab === 'links' && (
@@ -75,7 +75,9 @@ function MainContent() {
           />
         )}
 
-        {currentTab === 'alldone' && <AllDoneSection />}
+        {currentTab === 'alldone' && (
+          <AllDoneSection onGoToSupportSession={() => setCurrentTab('support')} />
+        )}
 
         {currentTab === 'leaderboard' && <LeaderboardView />}
 

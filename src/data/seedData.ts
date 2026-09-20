@@ -9,7 +9,7 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   recovery_end_time: '10:00',
   max_links_per_member: 1,
   fastest_bonus_prizes: [10, 8, 6, 4, 2],
-  base_all_done_points: 3,
+  base_all_done_points: 5,
   community_name: 'Support Link Box Official',
   timezone: 'Asia/Dhaka',
 };
@@ -242,5 +242,26 @@ export const SEED_NOTICES: NoticeItem[] = [
     created_at: new Date().toISOString(),
     created_by_name: 'Rafiqul Admin',
     is_pinned: false,
+  },
+];
+
+export const SEED_NOTIFICATIONS = [
+  {
+    id: 'notif-1',
+    member_id: 'mem-001',
+    title: '📢 স্বাগতম Support Link Box-এ',
+    message: 'কমিউনিটির নীতিমালা মেনে প্রতিদিনের সাপোর্ট সেশনে অংশগ্রহণ করুন।',
+    type: 'ANNOUNCEMENT' as const,
+    is_read: false,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'notif-2',
+    member_id: 'dev-shihab',
+    title: '⚡ সিস্টেম রেডি',
+    message: 'Chapter 14 Announcement & Notice System সক্রিয় রয়েছে।',
+    type: 'SYSTEM' as const,
+    is_read: false,
+    created_at: new Date().toISOString(),
   },
 ];

@@ -45,7 +45,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   onRequestApprove,
   onRequestReject,
 }) => {
-  const { updateMemberProfile, auditLogs, dailyLinks, allDoneRecords } = useApp();
+  const { updateMemberProfile, auditLogs, dailyLinks, allDoneRecords, punishments } = useApp();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'history' | 'edit'>('overview');
   
@@ -82,6 +82,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   // Member activity statistics
   const memberLinks = dailyLinks.filter((l) => l.owner_id === member.id);
   const memberAllDone = allDoneRecords.filter((r) => r.member_id === member.id);
+  const memberPunishments = (punishments || []).filter((p) => p.member_id === member.id);
   const memberLogs = auditLogs.filter(
     (l) => l.target_id === member.id || l.details?.includes(member.member_number)
   );
@@ -464,7 +465,42 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
 
           {/* TAB 3: AUDIT & HISTORY */}
           {activeTab === 'history' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Disciplinary / Punishment History */}
+              {memberPunishments.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-red-400 flex items-center gap-1.5 uppercase tracking-wider">
+                    <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                    <span>শাস্তি ও পেনাল্টি রেকর্ড ({memberPunishments.length})</span>
+                  </div>
+                  <div className="space-y-2">
+                    {memberPunishments.map((p) => (
+                      <div
+                        key={p.id}
+                        className="p-3 rounded-xl bg-red-950/30 border border-red-800/50 text-xs space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-[11px] font-bold text-red-300 bg-red-950 px-1.5 py-0.5 rounded border border-red-800">
+                            {p.punishment_type}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            তারিখ: {p.detected_date}
+                          </span>
+                        </div>
+                        <div className="text-slate-200 text-xs font-medium">{p.reason}</div>
+                        <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2 pt-1 border-t border-red-900/30 font-mono">
+                          <span>মিসিং সাপোর্ট: {p.missing_support_count}</span>
+                          <span>•</span>
+                          <span>স্ট্যাটাস: <strong className="text-amber-300">{p.status}</strong></span>
+                          <span>•</span>
+                          <span>সনাক্তকারী: {p.detected_by_admin}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="text-xs text-slate-400">
                 এই সদস্যের সাথে সম্পর্কিত সিকিউরিটি, রোল ও স্ট্যাটাস অডিট লগ:
               </div>

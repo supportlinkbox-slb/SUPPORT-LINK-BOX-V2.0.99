@@ -23,10 +23,15 @@ export const SUPPORT_ERROR_MESSAGES: Record<string, string> = {
   DATABASE_CONFLICT: 'সিস্টেমে একই সাথে একাধিক অনুরোধ এসেছে। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
   NETWORK_ERROR: 'ইন্টারনেট সংযোগে ত্রুটি। পুনরায় চেষ্টা করুন।',
   INTERNAL_ERROR: 'সার্ভারে সাময়িক সমস্যা। কিছুক্ষণ পর আবার চেষ্টা করুন।',
-  ALL_DONE_TOO_EARLY: 'এখনো All Done দেওয়ার সময় হয়নি। নির্ধারিত সময়ের পর আবার চেষ্টা করুন।',
+  ALL_DONE_NOT_OPEN: 'All Done এখনো শুরু হয়নি। ১৭:০০ BDT-এর পর Submit করতে পারবেন।',
+  WINDOW_NOT_OPEN: 'All Done এখনো শুরু হয়নি। ১৭:০০ BDT-এর পর Submit করতে পারবেন।',
+  ALL_DONE_TOO_EARLY: 'All Done এখনো শুরু হয়নি। ১৭:০০ BDT-এর পর Submit করতে পারবেন।',
   ALL_DONE_DEADLINE_PASSED: 'All Done দেওয়ার সময়সীমা শেষ হয়ে গেছে।',
   ALL_DONE_ALREADY_SUBMITTED: 'আজকের All Done ইতোমধ্যে দেওয়া হয়েছে।',
+  DUPLICATE_ALL_DONE: 'আজকের All Done ইতোমধ্যে দেওয়া হয়েছে।',
   ALL_DONE_SUPPORT_INCOMPLETE: 'আপনার সবগুলো সাপোর্ট এখনো সম্পন্ন হয়নি।',
+  SUPPORT_REQUIREMENTS_INCOMPLETE: 'All Done সম্ভব নয়! আপনার সবগুলো সাপোর্ট এখনো সম্পন্ন হয়নি।',
+  INCOMPLETE_SUPPORT: 'All Done সম্ভব নয়! আপনার সবগুলো সাপোর্ট এখনো সম্পন্ন হয়নি।',
   ALL_DONE_NOT_ELIGIBLE: 'আপনি All Done দেওয়ার জন্য যোগ্য নন।',
 };
 

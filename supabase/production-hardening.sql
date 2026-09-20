@@ -269,7 +269,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     recovery_end_time VARCHAR(10) NOT NULL DEFAULT '10:00',
     max_links_per_member INTEGER NOT NULL DEFAULT 1,
     fastest_bonus_prizes JSONB NOT NULL DEFAULT '[10, 8, 6, 4, 2]'::jsonb,
-    base_all_done_points INTEGER NOT NULL DEFAULT 3,
+    base_all_done_points INTEGER NOT NULL DEFAULT 5,
     community_name VARCHAR(100) NOT NULL DEFAULT 'Support Link Box Official',
     timezone VARCHAR(50) NOT NULL DEFAULT 'Asia/Dhaka',
     timezone_label VARCHAR(10) NOT NULL DEFAULT 'BDT',
@@ -665,14 +665,17 @@ DECLARE
     v_auth_uid UUID := auth.uid();
     v_member public.members%ROWTYPE;
     v_today DATE := (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka');
+    v_current_time TIME := (NOW() AT TIME ZONE 'Asia/Dhaka')::time;
+    v_start_time TIME := '17:00:00'::time;
     v_total_required_links INTEGER;
     v_supported_count INTEGER;
     v_existing_all_done_count INTEGER;
     v_rank INTEGER := NULL;
-    v_base_points INTEGER := 3;
+    v_base_points INTEGER := 5;
     v_bonus_points INTEGER := 0;
     v_total_points INTEGER;
     v_all_done_id UUID;
+    v_configured_start_str VARCHAR(10);
 BEGIN
     IF v_auth_uid IS NULL THEN
         RAISE EXCEPTION 'UNAUTHORIZED: Authentication required.';
@@ -681,6 +684,32 @@ BEGIN
     SELECT * INTO v_member FROM public.members WHERE auth_user_id = v_auth_uid;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'MEMBER_NOT_FOUND: Member profile not found.';
+    END IF;
+
+    -- Lookup configured start time & base points from settings if available
+    BEGIN
+        SELECT all_done_start_time, base_all_done_points
+        INTO v_configured_start_str, v_base_points
+        FROM public.settings
+        WHERE community_id = v_member.community_id OR id = 'default'
+        ORDER BY (id = 'default') ASC
+        LIMIT 1;
+
+        IF v_configured_start_str IS NOT NULL AND v_configured_start_str <> '' THEN
+            v_start_time := v_configured_start_str::time;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        v_start_time := '17:00:00'::time;
+        v_base_points := 5;
+    END;
+
+    IF v_base_points IS NULL OR v_base_points < 5 THEN
+        v_base_points := 5;
+    END IF;
+
+    -- Server-authoritative All Done start time validation (Default 17:00 Asia/Dhaka)
+    IF v_current_time < v_start_time THEN
+        RAISE EXCEPTION 'ALL_DONE_NOT_OPEN: All Done submission window opens at % Asia/Dhaka.', v_start_time;
     END IF;
 
     -- Duplicate check

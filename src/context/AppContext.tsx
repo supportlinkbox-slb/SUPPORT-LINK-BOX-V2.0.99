@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import confetti from 'canvas-confetti';
 import {
   MemberProfile,
@@ -8,7 +8,11 @@ import {
   AllDoneRecord,
   PointTransaction,
   LinkReport,
+  ReportMessage,
+  ReportStatus,
   NoticeItem,
+  NoticeType,
+  AppNotification,
   PunishmentRecord,
   AuditLog,
   SystemConfig,
@@ -22,6 +26,7 @@ import {
   SEED_MEMBERS,
   SEED_DAILY_LINKS,
   SEED_NOTICES,
+  SEED_NOTIFICATIONS,
 } from '../data/seedData';
 import {
   getBangladeshDateString,
@@ -42,6 +47,8 @@ import {
   supportApi,
   allDoneApi,
   configApi,
+  noticesApi,
+  notificationsApi,
   pointsApi,
   allDoneAdminApi,
   reportsApi,
@@ -72,6 +79,7 @@ interface AppContextType {
     profilePhotoUrl?: string;
     facebookIdentityKey?: string;
     facebookIdentityType?: 'numeric_id' | 'username';
+    tokenHash?: string;
   }) => Promise<{
     success: boolean;
     error?: string;
@@ -146,26 +154,51 @@ interface AppContextType {
   // Point Ledger & History
   pointLedger: PointTransaction[];
 
-  // Reports
+  // Reports (Chapter 15)
   reports: LinkReport[];
   submitReport: (report: {
     link_id: string;
     category: any;
     description: string;
     screenshot_url?: string;
-  }) => Promise<{ success: boolean; error?: string }>;
-  updateReportStatus: (reportId: string, status: any) => void;
-  sendReportMessage: (reportId: string, message: string) => void;
+  }) => Promise<{ success: boolean; error?: string; data?: any }>;
+  updateReportStatus: (reportId: string, status: ReportStatus, adminNotes?: string) => Promise<{ success: boolean; error?: string }>;
+  sendReportMessage: (reportId: string, message: string) => Promise<{ success: boolean; error?: string }>;
   createReportReply: (reportId: string, message: string) => Promise<{ success: boolean; error?: string }>;
 
   // Audit Logs
   auditLogs: AuditLog[];
   refreshData: () => Promise<void>;
 
-  // Notices
+  // Notices & Notifications (Chapter 14)
   notices: NoticeItem[];
   addNotice: (notice: Omit<NoticeItem, 'id' | 'created_at'>) => void;
   deleteNotice: (noticeId: string) => void;
+  generateNotice: (params: {
+    memberId: string;
+    type: NoticeType;
+    title: string;
+    content: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    isPinned?: boolean;
+    priority?: string;
+  }) => Promise<{ success: boolean; error?: string; exact_inactive_days?: number }>;
+  bulkGenerateNotices: (params: {
+    memberIds: string[];
+    type: NoticeType;
+    title: string;
+    contentTemplate: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    priority?: string;
+  }) => Promise<{ success: boolean; success_count?: number; skipped_count?: number; error?: string }>;
+  revokeNotice: (noticeId: string) => Promise<{ success: boolean; error?: string }>;
+
+  notifications: AppNotification[];
+  unreadNotificationCount: number;
+  markNotificationAsRead: (notificationId: string) => Promise<void>;
+  markAllNotificationsAsRead: () => Promise<void>;
 
   // Punishments & Recovery
   punishments: PunishmentRecord[];
@@ -272,6 +305,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return saved ? JSON.parse(saved) : SEED_NOTICES;
   });
 
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    if (isSupabaseConfigured) return [];
+    const saved = localStorage.getItem('slb_notifications');
+    return saved ? JSON.parse(saved) : SEED_NOTIFICATIONS;
+  });
+
+  const unreadNotificationCount = useMemo(() => {
+    if (!currentUser) return 0;
+    return notifications.filter(
+      (n) => n.member_id === currentUser.id && !n.is_read
+    ).length;
+  }, [notifications, currentUser]);
+
   const [punishments, setPunishments] = useState<PunishmentRecord[]>(() => {
     const saved = localStorage.getItem('slb_punishments');
     return saved ? JSON.parse(saved) : [];
@@ -327,6 +373,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (isSupabaseConfigured) return;
+    localStorage.setItem('slb_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  useEffect(() => {
+    if (isSupabaseConfigured) return;
     localStorage.setItem('slb_punishments', JSON.stringify(punishments));
   }, [punishments]);
 
@@ -340,13 +391,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isSupabaseConfigured) return;
 
     try {
-      const [linksRes, allDoneRes, noticesRes, auditRes, schedRes, pendingReviewsRes] = await Promise.all([
+      const [linksRes, allDoneRes, noticesRes, auditRes, schedRes, pendingReviewsRes, reportsRes] = await Promise.all([
         dailyLinksApi.getTodayLinks(todayDate),
         allDoneApi.getTodayAllDone(todayDate),
         configApi.getNotices(),
         configApi.getAuditLogs(),
         scheduledLinksApi.getMyScheduledLinks(),
         allDoneAdminApi.getPendingReviews(),
+        reportsApi.fetchReportsPaginated({ page: 1, pageSize: 50 }),
       ]);
 
       if (linksRes.success && linksRes.data) setDailyLinks(linksRes.data);
@@ -355,6 +407,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (auditRes.success && auditRes.data) setAuditLogs(auditRes.data);
       if (schedRes.success && schedRes.data) setScheduledLinks(schedRes.data);
       if (pendingReviewsRes.success && pendingReviewsRes.data) setPendingReviews(pendingReviewsRes.data);
+      if (reportsRes.success && reportsRes.data?.reports) setReports(reportsRes.data.reports);
 
       const profRes = await membersApi.getCurrentProfile();
       if (profRes.success && profRes.data) {
@@ -363,6 +416,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const suppRes = await supportApi.getTodaySupportRecords(todayDate, profRes.data.id);
           if (suppRes.success && suppRes.data) {
             setSupportedLinkIds(new Set(suppRes.data.map((r) => r.link_id)));
+          }
+          const notifRes = await notificationsApi.getMyNotifications(profRes.data.id);
+          if (notifRes.success && notifRes.data) {
+            setNotifications(notifRes.data);
           }
         } else {
           setCurrentUser(profRes.data); // Kept for status screen gate
@@ -496,6 +553,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       )
       .on(
         'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications' },
+        () => {
+          if (currentUser) {
+            notificationsApi.getMyNotifications(currentUser.id).then((res) => {
+              if (res.success && res.data) setNotifications(res.data);
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'scheduled_links' },
         () => {
           scheduledLinksApi.getMyScheduledLinks().then((res) => {
@@ -516,6 +584,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reports' },
+        () => {
+          reportsApi.fetchReportsPaginated({ page: 1, pageSize: 50 }).then((res) => {
+            if (res.success && res.data?.reports) setReports(res.data.reports);
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'report_replies' },
+        () => {
+          reportsApi.fetchReportsPaginated({ page: 1, pageSize: 50 }).then((res) => {
+            if (res.success && res.data?.reports) setReports(res.data.reports);
+          });
+        }
+      )
       .subscribe();
 
     return () => {
@@ -524,16 +610,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [todayDate, refreshData]);
 
-  // Window status checks
-  const submissionStatus = isWithinSubmissionWindow(
-    systemConfig.submission_start_time,
-    systemConfig.submission_end_time
-  );
+  // Periodic timer for live BDT window status re-evaluation
+  const [timeTick, setTimeTick] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeTick(Date.now());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const allDoneStatus = isWithinAllDoneWindow(
-    systemConfig.all_done_start_time,
-    systemConfig.all_done_deadline_time
-  );
+  // Window status checks (reacts dynamically to time tick)
+  const submissionStatus = useMemo(() => {
+    return isWithinSubmissionWindow(
+      systemConfig.submission_start_time,
+      systemConfig.submission_end_time
+    );
+  }, [systemConfig.submission_start_time, systemConfig.submission_end_time, timeTick]);
+
+  const allDoneStatus = useMemo(() => {
+    return isWithinAllDoneWindow(
+      systemConfig.all_done_start_time,
+      systemConfig.all_done_deadline_time
+    );
+  }, [systemConfig.all_done_start_time, systemConfig.all_done_deadline_time, timeTick]);
 
   // Helper: Log audit
   const addAuditLog = (action: string, targetType: string, targetId: string, details: string) => {
@@ -553,11 +652,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Auth Methods (Chapter 03)
-  const login = async (email: string, pass: string) => {
-    const trimmedEmail = email.trim().toLowerCase();
+  const login = async (identifier: string, pass: string) => {
+    const trimmedId = (identifier || '').trim();
 
     if (isSupabaseConfigured) {
-      const res = await authApi.signIn(trimmedEmail, pass);
+      const res = await authApi.signIn(trimmedId, pass);
       if (!res.success) {
         return { success: false, error: res.error };
       }
@@ -609,7 +708,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // Live Preview fallback mode
-    const found = members.find((m) => m.email.toLowerCase() === trimmedEmail);
+    const searchId = trimmedId.toLowerCase();
+    const found = members.find((m) => m.email.toLowerCase() === searchId || m.member_number?.toLowerCase() === searchId);
     if (!found) {
       return { success: false, error: 'কোন ইউজার খুঁজে পাওয়া যায়নি। ইমেইল চেক করুন।' };
     }
@@ -1405,6 +1505,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, error: 'আপনি ইতিমধ্যে আজকের All Done সম্পন্ন করেছেন।' };
     }
 
+    if (!allDoneStatus.isOpen) {
+      return {
+        success: false,
+        error: allDoneStatus.message || 'All Done এখনো শুরু হয়নি। ১৭:০০ BDT-এর পর Submit করতে পারবেন।',
+      };
+    }
+
     if (pendingRequiredSupportCount > 0) {
       return {
         success: false,
@@ -1533,64 +1640,129 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true, rank, points: totalAward };
   };
 
-  // Reports
+  // Reports (Chapter 15)
   const submitReport = async (reportData: {
     link_id: string;
     category: any;
     description: string;
     screenshot_url?: string;
   }) => {
-    const res = await reportsApi.createReport(
-      reportData.link_id,
-      reportData.category,
-      reportData.description,
-      reportData.screenshot_url
-    );
-    if (res.success) {
-      await refreshData();
+    if (isSupabaseConfigured) {
+      const res = await reportsApi.createReport(
+        reportData.link_id,
+        reportData.category,
+        reportData.description,
+        reportData.screenshot_url
+      );
+      if (res.success) {
+        await refreshData();
+      }
+      return res;
     }
-    return res;
+
+    // Local Preview Fallback
+    if (!currentUser) return { success: false, error: 'Unauthorized' };
+    const targetLink = dailyLinks.find((l) => l.id === reportData.link_id);
+    if (!targetLink) return { success: false, error: 'Target link not found' };
+
+    const existingActive = reports.find(
+      (r) => r.link_id === reportData.link_id && r.reporter_id === currentUser.id && (r.status === 'PENDING' || r.status === 'IN_DISCUSSION')
+    );
+    if (existingActive) {
+      return { success: false, error: 'এই Link সম্পর্কে আপনার একটি Active Report ইতোমধ্যে রয়েছে।' };
+    }
+
+    const newReport: LinkReport = {
+      id: `rep-${Date.now()}`,
+      report_serial_display: `REP-${String(reports.length + 1001).padStart(6, '0')}`,
+      link_id: reportData.link_id,
+      link_serial: targetLink.serial_display,
+      link_owner_id: targetLink.owner_id,
+      link_owner_name: targetLink.owner_name,
+      reporter_id: currentUser.id,
+      reporter_name: currentUser.name,
+      category: reportData.category,
+      description: reportData.description || 'No description provided',
+      screenshot_url: reportData.screenshot_url,
+      status: 'PENDING',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      messages: [],
+    };
+
+    setReports((prev) => [newReport, ...prev]);
+    addAuditLog('REPORT_CREATED', 'REPORT', newReport.id, `Submitted report [${reportData.category}] for link #${targetLink.serial_display}`);
+    return { success: true, data: { report_id: newReport.id, report_serial: newReport.report_serial_display } };
   };
 
   const createReportReply = async (reportId: string, message: string) => {
-    const res = await reportsApi.createReply(reportId, message);
-    if (res.success) {
-      await refreshData();
+    if (isSupabaseConfigured) {
+      const res = await reportsApi.createReply(reportId, message);
+      if (res.success) {
+        await refreshData();
+      }
+      return res;
     }
-    return res;
-  };
 
-  const updateReportStatus = (reportId: string, status: any) => {
-    setReports((prev) =>
-      prev.map((r) => (r.id === reportId ? { ...r, status, updated_at: new Date().toISOString() } : r))
-    );
-  };
-
-  const sendReportMessage = (reportId: string, message: string) => {
-    if (!currentUser) return;
-    const newMsg = {
+    if (!currentUser) return { success: false, error: 'Unauthorized' };
+    const newMsg: ReportMessage = {
       id: `msg-${Date.now()}`,
       report_id: reportId,
       sender_id: currentUser.id,
       sender_name: currentUser.name,
       sender_role: currentUser.role,
-      message,
+      message: message.trim(),
       created_at: new Date().toISOString(),
     };
+
     setReports((prev) =>
       prev.map((r) =>
         r.id === reportId
           ? {
               ...r,
+              status: r.status === 'PENDING' && currentUser.role !== 'MEMBER' ? 'IN_DISCUSSION' : r.status,
               messages: [...(r.messages || []), newMsg],
               updated_at: new Date().toISOString(),
             }
           : r
       )
     );
+    addAuditLog('REPORT_REPLY_CREATED', 'REPORT', reportId, `Replied to report: ${message.slice(0, 30)}`);
+    return { success: true };
   };
 
-  // Notices
+  const updateReportStatus = async (reportId: string, status: ReportStatus, adminNotes?: string) => {
+    if (isSupabaseConfigured) {
+      const res = await reportsApi.updateReportStatus(reportId, status, adminNotes);
+      if (res.success) {
+        await refreshData();
+      }
+      return res;
+    }
+
+    setReports((prev) =>
+      prev.map((r) =>
+        r.id === reportId
+          ? {
+              ...r,
+              status,
+              admin_notes: adminNotes || r.admin_notes,
+              resolved_at: status === 'RESOLVED' ? new Date().toISOString() : r.resolved_at,
+              dismissed_at: status === 'DISMISSED' ? new Date().toISOString() : r.dismissed_at,
+              updated_at: new Date().toISOString(),
+            }
+          : r
+      )
+    );
+    addAuditLog('REPORT_STATUS_CHANGED', 'REPORT', reportId, `Updated report status to ${status}`);
+    return { success: true };
+  };
+
+  const sendReportMessage = async (reportId: string, message: string) => {
+    return createReportReply(reportId, message);
+  };
+
+  // Notices & Notifications (Chapter 14)
   const addNotice = async (noticeData: Omit<NoticeItem, 'id' | 'created_at'>) => {
     if (isSupabaseConfigured) {
       await supabase.from('notices').insert({
@@ -1601,6 +1773,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         target_role: noticeData.target_role,
         days_inactive_filter: noticeData.days_inactive_filter,
         is_pinned: noticeData.is_pinned,
+        status: 'ACTIVE',
+        priority: noticeData.priority || 'NORMAL',
       });
       await refreshData();
       return;
@@ -1609,6 +1783,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newNotice: NoticeItem = {
       ...noticeData,
       id: `notice-${Date.now()}`,
+      status: 'ACTIVE',
       created_at: new Date().toISOString(),
     };
     setNotices((prev) => [newNotice, ...prev]);
@@ -1624,6 +1799,200 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setNotices((prev) => prev.filter((n) => n.id !== noticeId));
     addAuditLog('DELETE_NOTICE', 'NOTICE', noticeId, 'Deleted notice');
+  };
+
+  const generateNotice = async (params: {
+    memberId: string;
+    type: NoticeType;
+    title: string;
+    content: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    isPinned?: boolean;
+    priority?: string;
+  }) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'Only admins/developers can generate notices.' };
+    }
+
+    if (isSupabaseConfigured) {
+      const res = await noticesApi.generateNoticeSecure(params);
+      if (res.success) {
+        await refreshData();
+        return { success: true, exact_inactive_days: res.data?.exact_inactive_days };
+      }
+      return { success: false, error: res.error };
+    }
+
+    // Local Preview Mode Fallback
+    const targetMember = members.find((m) => m.id === params.memberId);
+    if (params.type === 'KICKOUT_NOTICE' && targetMember?.status !== 'REMOVED' && targetMember?.status !== 'BANNED') {
+      return { success: false, error: 'KICKOUT_NOTICE_NOT_ALLOWED: Member is still active' };
+    }
+
+    const newNotice: NoticeItem = {
+      id: `notice-${Date.now()}`,
+      title: params.title,
+      content: params.content,
+      type: params.type,
+      level: params.level as any,
+      target_member_id: params.memberId,
+      days_inactive_filter: params.daysInactiveFilter,
+      is_pinned: params.isPinned || false,
+      priority: (params.priority as any) || 'NORMAL',
+      status: 'ACTIVE',
+      created_by_name: currentUser.name,
+      created_at: new Date().toISOString(),
+    };
+
+    const newNotif: AppNotification = {
+      id: `notif-${Date.now()}`,
+      member_id: params.memberId,
+      title: params.title,
+      message: params.content,
+      type: params.type === 'ALERT_WARNING' || params.type === 'KICKOUT_NOTICE' ? 'WARNING' : 'NOTICE',
+      reference_id: newNotice.id,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+
+    setNotices((prev) => [newNotice, ...prev]);
+    setNotifications((prev) => [newNotif, ...prev]);
+    addAuditLog('CREATE_NOTICE', 'NOTICE', newNotice.id, `Generated notice [${params.type}] for ${targetMember?.name || params.memberId}`);
+    return { success: true };
+  };
+
+  const bulkGenerateNotices = async (params: {
+    memberIds: string[];
+    type: NoticeType;
+    title: string;
+    contentTemplate: string;
+    level?: string;
+    daysInactiveFilter?: number;
+    priority?: string;
+  }) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'Only admins/developers can bulk generate notices.' };
+    }
+
+    if (isSupabaseConfigured) {
+      const res = await noticesApi.bulkGenerateNoticesSecure(params);
+      if (res.success) {
+        await refreshData();
+        return {
+          success: true,
+          success_count: res.data?.success_count,
+          skipped_count: res.data?.skipped_count,
+        };
+      }
+      return { success: false, error: res.error };
+    }
+
+    // Local Preview Mode Fallback
+    let successCount = 0;
+    let skippedCount = 0;
+    const newNotices: NoticeItem[] = [];
+    const newNotifs: AppNotification[] = [];
+
+    for (const memId of params.memberIds) {
+      const member = members.find((m) => m.id === memId);
+      if (!member) {
+        skippedCount++;
+        continue;
+      }
+      if (params.type === 'KICKOUT_NOTICE' && member.status !== 'REMOVED' && member.status !== 'BANNED') {
+        skippedCount++;
+        continue;
+      }
+
+      const renderedContent = params.contentTemplate
+        .replace(/{member_name}/g, member.name)
+        .replace(/{member_number}/g, member.member_number || '')
+        .replace(/{days_inactive}/g, String(params.daysInactiveFilter || 3));
+
+      const nId = `notice-bulk-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      newNotices.push({
+        id: nId,
+        title: params.title,
+        content: renderedContent,
+        type: params.type,
+        level: params.level as any,
+        target_member_id: memId,
+        days_inactive_filter: params.daysInactiveFilter,
+        is_pinned: false,
+        priority: (params.priority as any) || 'NORMAL',
+        status: 'ACTIVE',
+        created_by_name: currentUser.name,
+        created_at: new Date().toISOString(),
+      });
+
+      newNotifs.push({
+        id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        member_id: memId,
+        title: params.title,
+        message: renderedContent,
+        type: params.type === 'ALERT_WARNING' || params.type === 'KICKOUT_NOTICE' ? 'WARNING' : 'NOTICE',
+        reference_id: nId,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+      successCount++;
+    }
+
+    setNotices((prev) => [...newNotices, ...prev]);
+    setNotifications((prev) => [...newNotifs, ...prev]);
+    addAuditLog('BULK_NOTICE', 'NOTICE', 'BULK', `Bulk generated ${successCount} notices [${params.type}]`);
+    return { success: true, success_count: successCount, skipped_count: skippedCount };
+  };
+
+  const revokeNotice = async (noticeId: string) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'Only admins/developers can revoke notices.' };
+    }
+
+    if (isSupabaseConfigured) {
+      const res = await noticesApi.revokeNotice(noticeId);
+      if (res.success) {
+        await refreshData();
+        return { success: true };
+      }
+      return { success: false, error: res.error };
+    }
+
+    setNotices((prev) =>
+      prev.map((n) => (n.id === noticeId ? { ...n, status: 'REVOKED' } : n))
+    );
+    addAuditLog('REVOKE_NOTICE', 'NOTICE', noticeId, 'Revoked notice');
+    return { success: true };
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    if (isSupabaseConfigured) {
+      await notificationsApi.markAsRead(notificationId);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n))
+      );
+      return;
+    }
+
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notificationId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n))
+    );
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!currentUser) return;
+    if (isSupabaseConfigured) {
+      await notificationsApi.markAllAsRead(currentUser.id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.member_id === currentUser.id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n))
+      );
+      return;
+    }
+
+    setNotifications((prev) =>
+      prev.map((n) => (n.member_id === currentUser.id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n))
+    );
   };
 
   // Fake All Done & Penalty Verification (Admin)
@@ -1946,6 +2315,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notices,
         addNotice,
         deleteNotice,
+        generateNotice,
+        bulkGenerateNotices,
+        revokeNotice,
+        notifications,
+        unreadNotificationCount,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
         punishments,
         activePenalty,
         verifyFakeAllDone,

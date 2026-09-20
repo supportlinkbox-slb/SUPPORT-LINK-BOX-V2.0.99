@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
+import { NotificationCenter } from '../announcements/NotificationCenter';
 
 interface NavbarProps {
   currentTab: string;
@@ -174,6 +175,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {isAuthenticated && currentUser ? (
               <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+                <NotificationCenter onNavigateToTab={setCurrentTab} />
                 <div
                   className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/60 cursor-pointer hover:bg-slate-800 transition"
                   onClick={() => setCurrentTab('profile')}
@@ -204,6 +206,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Mobile Menu Button */}
           <div className="flex items-center gap-2 md:hidden">
+            {isAuthenticated && currentUser && (
+              <NotificationCenter onNavigateToTab={setCurrentTab} />
+            )}
             <button
               onClick={onOpenSubmitModal}
               className="p-2 rounded-lg bg-cyan-600 text-white font-bold text-xs"

@@ -131,9 +131,12 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.check_login_status(TEXT) TO anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.check_login_status(TEXT) FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.record_login_failure(TEXT) FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.reset_login_attempts(TEXT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_login_status(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.record_login_failure(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reset_login_attempts(TEXT) TO service_role;
 
 -- ------------------------------------------------------------------------------
 -- 5. MINIMAL ANONYMOUS TOKEN VERIFIER (Anti-Enumeration & Rate Limited)
@@ -253,8 +256,11 @@ BEGIN
     v_norm_email := LOWER(TRIM(NEW.email));
 
     -- If member already exists (e.g. created by Admin for an invite),
-    -- DO NOT create a new member profile to prevent duplicate conflicts.
+    -- LINK auth_user_id to prevent orphan auth user.
     IF EXISTS (SELECT 1 FROM public.members WHERE LOWER(email) = v_norm_email) THEN
+        UPDATE public.members
+        SET auth_user_id = NEW.id
+        WHERE LOWER(email) = v_norm_email AND (auth_user_id IS NULL OR auth_user_id = NEW.id);
         RETURN NEW;
     END IF;
 
@@ -347,6 +353,7 @@ BEGIN
     END IF;
 END;
 $$;
-GRANT EXECUTE ON FUNCTION public.get_email_by_identifier(TEXT) TO anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.get_email_by_identifier(TEXT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_email_by_identifier(TEXT) TO service_role;
 
 COMMIT;

@@ -186,3 +186,33 @@ export function canScheduleForTomorrow(): { isAllowed: boolean; message: string;
     targetDate: tomorrowDate,
   };
 }
+
+/**
+ * Checks if current Bangladesh Time is within the late recovery window (00:00 to 10:00 BDT).
+ * After 10:00 AM BDT, unresolved recovery transitions to Admin Contact Required.
+ */
+export function isWithinRecoveryWindow(cutoffTime = '10:00'): {
+  isRecoveryOpen: boolean;
+  isCutoffPassed: boolean;
+  message: string;
+} {
+  const now = getBangladeshNow();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const [cutoffH, cutoffM] = cutoffTime.split(':').map(Number);
+  const cutoffMinutes = cutoffH * 60 + cutoffM;
+
+  if (currentMinutes < cutoffMinutes) {
+    return {
+      isRecoveryOpen: true,
+      isCutoffPassed: false,
+      message: `রিকভারি উইন্ডো সকাল ${cutoffTime} টা পর্যন্ত চালু থাকবে (BDT)`,
+    };
+  }
+
+  return {
+    isRecoveryOpen: false,
+    isCutoffPassed: true,
+    message: `রিকভারি সময়সীমা (সকাল ${cutoffTime} টা BDT) উত্তীর্ণ হয়েছে। এডমিনের সাথে যোগাযোগ করুন।`,
+  };
+}

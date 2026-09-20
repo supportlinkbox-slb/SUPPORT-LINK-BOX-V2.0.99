@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   CheckCircle2,
   Trophy,
@@ -9,57 +9,30 @@ import {
   HelpCircle,
   ShieldCheck,
   Zap,
+  Flame,
+  ExternalLink,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
 import { DailyAllDoneBox } from './DailyAllDoneBox';
 
-export const AllDoneSection: React.FC = () => {
+interface AllDoneSectionProps {
+  onGoToSupportSession?: () => void;
+}
+
+export const AllDoneSection: React.FC<AllDoneSectionProps> = ({ onGoToSupportSession }) => {
   const {
     currentUser,
     allDoneStatus,
     pendingRequiredSupportCount,
     isAllDoneSubmittedToday,
     userAllDoneRecord,
-    submitAllDone,
     allDoneRecords,
     todayDate,
   } = useApp();
 
-  const [altIdOpen, setAltIdOpen] = useState(false);
-  const [altName, setAltName] = useState('');
-  const [altLink, setAltLink] = useState('');
-  const [altNote, setAltNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
   const todaysAllDoneCount = allDoneRecords.filter((r) => r.date === todayDate).length;
-
-  const handleAllDoneSubmit = async () => {
-    setErrorMsg('');
-    setSuccessMsg('');
-    setSubmitting(true);
-
-    const altDetails = altIdOpen && altName.trim()
-      ? { account_name: altName.trim(), account_link: altLink.trim(), note: altNote.trim() }
-      : undefined;
-
-    const res = await submitAllDone(altDetails);
-    setSubmitting(false);
-
-    if (res.success) {
-      setSuccessMsg(
-        `অভিনন্দন! আপনার All Done সফলভাবে সম্পন্ন হয়েছে। ${
-          res.rank ? `আপনি #${res.rank} তম দ্রুততম হয়েছেন! মোট পয়েন্ট: +${res.points}` : `মোট পয়েন্ট: +${res.points}`
-        }`
-      );
-    } else {
-      setErrorMsg(res.error || 'All Done সম্পন্ন করা যায়নি।');
-    }
-  };
-
-  const isEligible = pendingRequiredSupportCount === 0;
+  const isSupportComplete = pendingRequiredSupportCount === 0;
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -79,7 +52,7 @@ export const AllDoneSection: React.FC = () => {
               Official All Done Verification
             </h1>
             <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              আজকের সকল লিংকে লাইক ও কমেন্ট সম্পন্ন করার পর All Done বাটনে ক্লিক করে আপনার উপস্থিতি নিশ্চিত করুন এবং পয়েন্ট অর্জন করুন।
+              আজকের নির্ধারিত সকল লিংকে সাপোর্ট সম্পন্ন করার পর Support Session / Link Box এর ভেতর থেকে All Done নিশ্চিত করে পয়েন্ট ও বোনাস অর্জন করুন।
             </p>
           </div>
 
@@ -92,44 +65,30 @@ export const AllDoneSection: React.FC = () => {
             <div className="space-y-1 text-xs font-mono">
               <div className="flex justify-between text-amber-300">
                 <span>🥇 ১ম জন:</span>
-                <span className="font-bold">+১০ বোনাস (১৩ মোট)</span>
+                <span className="font-bold">+১০ বোনাস (১৫ মোট)</span>
               </div>
               <div className="flex justify-between text-slate-300">
                 <span>🥈 ২য় জন:</span>
-                <span className="font-bold">+৮ বোনাস (১১ মোট)</span>
+                <span className="font-bold">+৮ বোনাস (১৩ মোট)</span>
               </div>
               <div className="flex justify-between text-amber-500">
                 <span>🥉 ৩য় জন:</span>
-                <span className="font-bold">+৬ বোনাস (৯ মোট)</span>
+                <span className="font-bold">+৬ বোনাস (১১ মোট)</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>৪র্থ / ৫ম জন:</span>
-                <span className="font-bold">+৪ / +২ বোনাস</span>
+                <span className="font-bold">+৪ / +২ বোনাস (৯ / ৭ মোট)</span>
               </div>
               <div className="flex justify-between text-slate-500 border-t border-slate-800 pt-1">
                 <span>অন্যান্য সবাই:</span>
-                <span className="font-bold">+৩ পয়েন্ট</span>
+                <span className="font-bold text-emerald-400">+৫ পয়েন্ট (Base)</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* User Submission Status */}
-        <div className="mt-8 pt-6 border-t border-slate-800 flex flex-col items-center text-center space-y-4">
-          {errorMsg && (
-            <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded-xl flex items-center gap-2 max-w-md w-full">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          {successMsg && (
-            <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs rounded-xl flex items-center gap-2 max-w-md w-full">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-
+        {/* User Submission Status Overview */}
+        <div className="mt-8 pt-6 border-t border-slate-800 flex flex-col items-center text-center">
           {isAllDoneSubmittedToday && userAllDoneRecord ? (
             <div className="bg-emerald-950/40 border border-emerald-800/80 rounded-2xl p-6 max-w-md w-full text-center space-y-2">
               <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
@@ -139,8 +98,9 @@ export const AllDoneSection: React.FC = () => {
               </div>
               <div className="flex items-center justify-center gap-2 pt-2">
                 {userAllDoneRecord.fastest_rank ? (
-                  <span className="bg-amber-500 text-slate-950 font-black text-xs px-3 py-1 rounded-full shadow-md">
-                    🏆 Rank #{userAllDoneRecord.fastest_rank} Fastest
+                  <span className="bg-amber-500 text-slate-950 font-black text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                    <Trophy className="w-3.5 h-3.5" />
+                    <span>Rank #{userAllDoneRecord.fastest_rank} Fastest</span>
                   </span>
                 ) : null}
                 <span className="bg-emerald-500/20 text-emerald-400 font-bold text-xs px-3 py-1 rounded-full border border-emerald-500/30">
@@ -148,74 +108,61 @@ export const AllDoneSection: React.FC = () => {
                 </span>
               </div>
             </div>
-          ) : (
-            <div className="w-full max-w-md space-y-4">
-              {/* Obligation Warning */}
-              {!isEligible && (
-                <div className="p-3 bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs rounded-xl text-left flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-                  <div>
-                    <span className="font-bold">সাপোর্ট বাকি আছে:</span>
-                    <span> আপনার এখনও {pendingRequiredSupportCount} টি লিংকে সাপোর্ট দেওয়া বাকি রয়েছে। সব লিংকে সাপোর্ট দিয়ে অল ডান সম্পন্ন করুন।</span>
-                  </div>
+          ) : !isSupportComplete ? (
+            <div className="bg-amber-950/40 border border-amber-800/60 rounded-2xl p-6 max-w-lg w-full text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="text-base font-bold text-white">সাপোর্ট এখনও অসম্পূর্ণ রয়েছে</div>
+              <p className="text-xs text-amber-300 leading-relaxed">
+                আপনার এখনও <span className="font-bold text-white">{pendingRequiredSupportCount}</span> টি লিংকে সাপোর্ট দেওয়া বাকি আছে। সবগুলো লিংকে সাপোর্ট সম্পন্ন করার পরই All Done সাবমিট সক্রিয় হবে।
+              </p>
+              {onGoToSupportSession && (
+                <div className="pt-2">
+                  <button
+                    onClick={onGoToSupportSession}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-xs shadow-lg shadow-orange-500/20 transition flex items-center gap-2 mx-auto transform hover:scale-105"
+                  >
+                    <Flame className="w-4 h-4 fill-slate-950" />
+                    <span>সাপোর্ট সেশনে যান</span>
+                  </button>
                 </div>
               )}
-
-              {/* Alternative ID Disclosure Accordion */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden text-left">
-                <button
-                  type="button"
-                  onClick={() => setAltIdOpen(!altIdOpen)}
-                  className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-300 hover:text-white transition"
-                >
-                  <span className="flex items-center gap-2">
-                    <HelpCircle className="w-4 h-4 text-cyan-400" />
-                    <span>আপনি কি অন্য আইডি দিয়ে সাপোর্ট কমপ্লিট করেছেন?</span>
-                  </span>
-                  <span className="text-[11px] text-cyan-400 underline">
-                    {altIdOpen ? 'লুকান' : 'তথ্য দিন'}
-                  </span>
-                </button>
-
-                {altIdOpen && (
-                  <div className="px-4 pb-4 space-y-2.5 pt-1 border-t border-slate-850">
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
-                        যে ফেসবুক অ্যাকাউন্ট দিয়ে সাপোর্ট দিয়েছেন তার নাম:
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="যেমন: MD Hasan Profile 2"
-                        value={altName}
-                        onChange={(e) => setAltName(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
-                        ঐ অ্যাকাউন্টের ফেসবুক প্রোফাইল লিংক (ঐচ্ছিক):
-                      </label>
-                      <input
-                        type="url"
-                        placeholder="https://facebook.com/..."
-                        value={altLink}
-                        onChange={(e) => setAltLink(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                      />
-                    </div>
-                  </div>
-                )}
+            </div>
+          ) : !allDoneStatus.isOpen ? (
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 max-w-lg w-full text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mx-auto">
+                <Clock className="w-6 h-6" />
               </div>
-
-              {/* Central ALL DONE Button */}
-              <button
-                onClick={handleAllDoneSubmit}
-                disabled={submitting || !isEligible}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 disabled:opacity-40 disabled:hover:scale-100 text-slate-950 font-black text-base shadow-xl shadow-emerald-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2.5"
-              >
-                <CheckCircle2 className="w-5 h-5 fill-slate-950" />
-                <span>{submitting ? 'ভেরিফাই করা হচ্ছে...' : 'ALL DONE নিশ্চিত করুন'}</span>
-              </button>
+              <div className="text-base font-bold text-white">সব সাপোর্ট সম্পন্ন! All Done উইন্ডো অপেক্ষায়</div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                আপনার সকল সাপোর্ট সম্পন্ন হয়েছে। All Done সাবমিশন শুরু হবে বিকাল ৫:০০ (১৭:০০ BDT)-এ। ১৭:০০ BDT হলে Link Box / Support Session পেজ থেকে আপনি All Done সাবমিট করতে পারবেন।
+              </p>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 text-xs font-mono">
+                <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                <span>উইন্ডো: ১৭:০০ - ২৪:০০ BDT</span>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-emerald-950/30 border border-emerald-800/60 rounded-2xl p-6 max-w-lg w-full text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <div className="text-base font-bold text-white">All Done সাবমিশনের জন্য প্রস্তুত!</div>
+              <p className="text-xs text-emerald-200 leading-relaxed">
+                আপনার সকল সাপোর্ট সম্পন্ন এবং All Done উইন্ডো চালু রয়েছে। অনুগ্রহ করে Support Session / Link Box এ গিয়ে All Done নিশ্চিত করুন।
+              </p>
+              {onGoToSupportSession && (
+                <div className="pt-2">
+                  <button
+                    onClick={onGoToSupportSession}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2 mx-auto transform hover:scale-105"
+                  >
+                    <CheckCircle2 className="w-4 h-4 fill-slate-950" />
+                    <span>সাপোর্ট সেশনে All Done সাবমিট করুন</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

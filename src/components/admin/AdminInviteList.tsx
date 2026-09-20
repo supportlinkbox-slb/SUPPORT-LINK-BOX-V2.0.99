@@ -4,7 +4,7 @@ import { ShieldBan, User, Clock, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { useApp } from '../../context/AppContext';
 
 export const AdminInviteList: React.FC = () => {
-  const { currentMember } = useApp();
+  const { currentUser } = useApp();
   const [invites, setInvites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -37,10 +37,10 @@ export const AdminInviteList: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentMember?.role === 'ADMIN') {
+    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'DEVELOPER') {
       fetchInvites();
     }
-  }, [currentMember]);
+  }, [currentUser]);
 
   const handleRevoke = async (id: string) => {
     if (!window.confirm('আপনি কি নিশ্চিত যে এই ইনভাইটেশনটি বাতিল করতে চান?')) return;
