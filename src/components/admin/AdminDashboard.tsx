@@ -30,6 +30,7 @@ import { MemberActionConfirmModal, ActionModalState } from './MemberActionConfir
 import { formatToBDT } from '../../utils/bangladeshTime';
 import { AdminInviteMember } from './AdminInviteMember';
 import { AdminInviteList } from './AdminInviteList';
+import { AdminSettingsPanel } from './AdminSettingsPanel';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -46,7 +47,7 @@ export const AdminDashboard: React.FC = () => {
     updateMemberStatus,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'OVERVIEW' | 'INVITE'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'OVERVIEW' | 'INVITE' | 'SETTINGS'>('REQUESTS');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -268,6 +269,16 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           <span>Admin Invite (নতুন সদস্য)</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('SETTINGS')}
+          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+            activeTab === 'SETTINGS'
+              ? 'border-cyan-500 text-cyan-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <span>System Settings (সেটিংস প্যানেল)</span>
         </button>
       </div>
 
@@ -575,6 +586,9 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* TAB 5: SYSTEM SETTINGS PANEL */}
+      {activeTab === 'SETTINGS' && <AdminSettingsPanel />}
 
       {/* Member Details Modal */}
       {isDetailsOpen && selectedMember && (

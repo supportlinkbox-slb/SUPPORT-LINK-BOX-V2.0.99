@@ -31,6 +31,7 @@ export interface MemberProfile {
   joined_at: string;
   last_active_at: string;
   days_inactive?: number;
+  can_submit_links?: boolean;
   is_verified?: boolean;
   approved_at?: string;
   approved_by?: string;
@@ -478,15 +479,42 @@ export interface VipRewardEntitlement {
   updated_at: string;
 }
 
-export interface SystemConfig {
-  submission_start_time: string; // "10:00"
-  submission_end_time: string; // "16:50"
-  all_done_start_time: string; // "17:00"
-  all_done_deadline_time: string; // "24:00"
-  recovery_end_time: string; // "10:00"
-  max_links_per_member: number;
-  fastest_bonus_prizes: number[]; // [10, 8, 6, 4, 2]
-  base_all_done_points: number; // 5
-  community_name: string;
-  timezone: string; // "Asia/Dhaka" (BDT = UTC+6)
+export interface SystemSettings {
+  submission_start_time: string; // e.g. "00:00"
+  submission_end_time: string; // e.g. "16:50"
+  all_done_start_time: string; // e.g. "17:00"
+  all_done_deadline_time: string; // e.g. "23:59"
+  late_support_weekly_limit: number; // e.g. 2
+  can_submit_links_global: boolean;
+  maintenance_mode: boolean;
 }
+
+export interface AdminSupportContact {
+  id: string;
+  admin_id: string;
+  admin_name: string;
+  admin_role: string;
+  facebook_url?: string;
+  whatsapp_number?: string;
+  helpline_note?: string;
+  is_active: boolean;
+  updated_at: string;
+}
+
+export interface MovieItem {
+  id: string;
+  title: string;
+  category: 'Movie' | 'Web Series' | 'Drama' | 'Short Film';
+  poster_url: string;
+  description?: string;
+  resolutions: {
+    res_480p?: string;
+    res_720p?: string;
+    res_1080p?: string;
+  };
+  pixeldrain_url?: string;
+  gdflex_url?: string;
+  created_at: string;
+  created_by?: string;
+}
+

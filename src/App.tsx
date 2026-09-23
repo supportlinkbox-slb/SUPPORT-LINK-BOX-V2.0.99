@@ -10,6 +10,7 @@ import { ReportsAdminView } from './components/admin/ReportsAdminView';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { MemberProfileView } from './components/member/MemberProfileView';
 import { SpecialSupportDutyBanner } from './components/member/SpecialSupportDutyBanner';
+import { MovieLoverView } from './components/member/MovieLoverView';
 import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { StatusGateScreen } from './components/auth/StatusGateScreen';
@@ -80,6 +81,8 @@ function MainContent() {
         )}
 
         {currentTab === 'leaderboard' && <LeaderboardView />}
+
+        {currentTab === 'entertainment' && <MovieLoverView />}
 
         {currentTab === 'notices' && <NoticeSection />}
 

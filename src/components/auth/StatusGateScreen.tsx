@@ -76,6 +76,42 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
           </div>
         </div>
 
+        {/* Active Admin Support Helpline Cards */}
+        <div className="border-t border-slate-800 pt-4 text-left space-y-3">
+          <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
+            সহায়তার জন্য এডমিন হেল্পলাইন:
+          </span>
+          <div className="bg-slate-950 border border-slate-800 p-3 rounded-2xl space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-emerald-400">Support Link Box Helpline</span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                Active Admin
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              একাউন্ট আনলক বা এপ্রুভালের জন্য নিচের মাধ্যমে যোগাযোগ করতে পারেন।
+            </p>
+            <div className="pt-1 flex gap-2">
+              <a
+                href="https://facebook.com/supportlinkbox"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-2 rounded-xl bg-blue-600/20 text-blue-300 border border-blue-500/30 font-bold text-center text-[11px] hover:bg-blue-600 hover:text-white transition"
+              >
+                ফেসবুক মেসেজ
+              </a>
+              <a
+                href="https://wa.me/8801700000000"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-2 rounded-xl bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 font-bold text-center text-[11px] hover:bg-emerald-600 hover:text-white transition"
+              >
+                হোয়াটসঅ্যাপ সাপোর্ট
+              </a>
+            </div>
+          </div>
+        </div>
+
         <button
           onClick={logout}
           className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center justify-center gap-2 border border-slate-700"

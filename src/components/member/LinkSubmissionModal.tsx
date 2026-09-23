@@ -57,6 +57,11 @@ export const LinkSubmissionModal: React.FC<LinkSubmissionModalProps> = ({
       return;
     }
 
+    if (!isPrivileged && currentUser.can_submit_links === false) {
+      setErrorMessage('আপনার অ্যাকাউন্ট থেকে লিংক জমা দেওয়ার সুবিধাটি এডমিন কর্তৃক ব্লক করা হয়েছে।');
+      return;
+    }
+
     if (submitOnBehalf && !selectedMemberId) {
       setErrorMessage('অনুগ্রহ করে যে সদস্যের পক্ষে লিংক জমা দেবেন তাকে নির্বাচন করুন।');
       return;
