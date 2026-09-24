@@ -20,6 +20,10 @@ import {
   MemberStatus,
   PostType,
   LinkCategory,
+  MovieItem,
+  MovieStatus,
+  MovieRequest,
+  MovieRequestStatus,
 } from '../types';
 import {
   DEFAULT_SYSTEM_CONFIG,
@@ -247,6 +251,15 @@ interface AppContextType {
     targetId: string,
     details: string
   ) => Promise<void>;
+
+  // Movie Lover System (3-Layer Secured)
+  movies: MovieItem[];
+  movieRequests: MovieRequest[];
+  addMovie: (movie: Omit<MovieItem, 'id' | 'created_at'>) => Promise<{ success: boolean; error?: string; movie?: MovieItem }>;
+  updateMovie: (id: string, updates: Partial<MovieItem>) => Promise<{ success: boolean; error?: string }>;
+  deleteMovie: (id: string) => Promise<{ success: boolean; error?: string }>;
+  submitMovieRequest: (requestData: { movie_title: string; release_year: string; thumbnail_url?: string }) => Promise<{ success: boolean; error?: string; request?: MovieRequest }>;
+  updateMovieRequestStatus: (requestId: string, status: MovieRequestStatus, notes?: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -328,6 +341,71 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return saved ? JSON.parse(saved) : [];
   });
   const [pendingReviews, setPendingReviews] = useState<any[]>([]);
+
+  const [movies, setMovies] = useState<MovieItem[]>(() => {
+    const saved = localStorage.getItem('slb_movies');
+    return saved
+      ? JSON.parse(saved)
+      : [
+          {
+            id: 'movie-1',
+            title: 'Pather Panchali (পথের পাঁচালী)',
+            release_year: '1955',
+            category: 'Movie',
+            poster_url: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80',
+            description: 'Satyajit Ray classic masterpiece drama celebrating Bengali life and cinema history.',
+            language: 'Bengali',
+            quality: '1080p',
+            status: 'Published',
+            resolutions: {
+              res_480p: 'https://pixeldrain.com/u/sample480',
+              res_720p: 'https://pixeldrain.com/u/sample720',
+              res_1080p: 'https://pixeldrain.com/u/sample1080',
+            },
+            pixeldrain_url: 'https://pixeldrain.com/u/sample1080',
+            gdflex_url: 'https://gdflex.net/view/sample1080',
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 'movie-2',
+            title: 'Hawa (হাওয়া)',
+            release_year: '2022',
+            category: 'Movie',
+            poster_url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&auto=format&fit=crop&q=80',
+            description: 'A mystery drama thriller in deep sea waters directed by Mejbaur Rahman Sumon.',
+            language: 'Bengali',
+            quality: '1080p',
+            status: 'Published',
+            resolutions: {
+              res_720p: 'https://pixeldrain.com/u/hawa720',
+              res_1080p: 'https://pixeldrain.com/u/hawa1080',
+            },
+            pixeldrain_url: 'https://pixeldrain.com/u/hawa1080',
+            gdflex_url: 'https://gdflex.net/view/hawa1080',
+            created_at: new Date().toISOString(),
+          },
+        ];
+  });
+
+  const [movieRequests, setMovieRequests] = useState<MovieRequest[]>(() => {
+    const saved = localStorage.getItem('slb_movie_requests');
+    return saved
+      ? JSON.parse(saved)
+      : [
+          {
+            id: 'req-1',
+            member_id: 'member-101',
+            member_name: 'রাহাত হোসাইন',
+            member_number: 'SLB-101',
+            movie_title: 'Avengers: Endgame',
+            release_year: '2019',
+            thumbnail_url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=80',
+            status: 'PENDING',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ];
+  });
 
   const [currentSupportLinkIndex, setCurrentSupportLinkIndex] = useState<number>(0);
 
@@ -2270,6 +2348,161 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
+  // Movie Lover System - 3-Layer Security Implementations
+  const addMovie = async (
+    movieData: Omit<MovieItem, 'id' | 'created_at'>
+  ): Promise<{ success: boolean; error?: string; movie?: MovieItem }> => {
+    // Layer 1: Authentication Check
+    if (!currentUser) return { success: false, error: 'লগইন আবশ্যক।' };
+    if (currentUser.status !== 'ACTIVE') return { success: false, error: 'আপনার অ্যাকাউন্ট সচল নয়।' };
+
+    // Layer 2: Role Authorization Check
+    if (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER') {
+      return { success: false, error: 'সিকিউরিটি অ্যালার্ট: মুভি আপলোড করার অনুমতি কেবল এডমিনের রয়েছে।' };
+    }
+
+    // Layer 3: Data & Storage Enforcement
+    const newMovie: MovieItem = {
+      ...movieData,
+      id: `movie-${Date.now()}`,
+      created_at: new Date().toISOString(),
+      created_by: currentUser.id,
+    };
+
+    setMovies((prev) => [newMovie, ...prev]);
+    localStorage.setItem('slb_movies', JSON.stringify([newMovie, ...movies]));
+
+    addAuditLog('MOVIE_UPLOADED', 'MOVIE', newMovie.id, `Uploaded movie: ${newMovie.title} (${newMovie.release_year})`);
+    return { success: true, movie: newMovie };
+  };
+
+  const updateMovie = async (
+    id: string,
+    updates: Partial<MovieItem>
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'সিকিউরিটি অ্যালার্ট: মুভি সম্পাদনার অনুমতি নেই।' };
+    }
+
+    setMovies((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
+    );
+    const updated = movies.map((m) => (m.id === id ? { ...m, ...updates } : m));
+    localStorage.setItem('slb_movies', JSON.stringify(updated));
+
+    addAuditLog('MOVIE_UPDATED', 'MOVIE', id, `Updated movie parameters for ID: ${id}`);
+    return { success: true };
+  };
+
+  const deleteMovie = async (
+    id: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'সিকিউরিটি অ্যালার্ট: মুভি ডিলিট করার অনুমতি নেই।' };
+    }
+
+    setMovies((prev) => prev.filter((m) => m.id !== id));
+    const filtered = movies.filter((m) => m.id !== id);
+    localStorage.setItem('slb_movies', JSON.stringify(filtered));
+
+    addAuditLog('MOVIE_DELETED', 'MOVIE', id, `Deleted/Archived movie ID: ${id}`);
+    return { success: true };
+  };
+
+  const submitMovieRequest = async (requestData: {
+    movie_title: string;
+    release_year: string;
+    thumbnail_url?: string;
+  }): Promise<{ success: boolean; error?: string; request?: MovieRequest }> => {
+    // Layer 1: Authentication Check
+    if (!currentUser) return { success: false, error: 'লগইন আবশ্যক।' };
+    if (currentUser.status !== 'ACTIVE') return { success: false, error: 'অ্যাক্টিভ একাউন্ট ছাড়া রিকোয়েস্ট করা সম্ভব নয়।' };
+
+    const titleTrimmed = requestData.movie_title.trim();
+    if (!titleTrimmed) return { success: false, error: 'মুভির নাম দিন।' };
+
+    // Duplicate Check: Same member cannot request the same movie title repeatedly
+    const isDuplicate = movieRequests.some(
+      (r) =>
+        r.member_id === currentUser.id &&
+        r.movie_title.toLowerCase() === titleTrimmed.toLowerCase() &&
+        r.status !== 'REJECTED' &&
+        r.status !== 'CANCELLED'
+    );
+
+    if (isDuplicate) {
+      return { success: false, error: 'This Movie has already been requested. (আপনি ইতোমধ্যে এই মুভিটির জন্য রিকোয়েস্ট করেছেন)' };
+    }
+
+    // Layer 2 & 3: Force authenticated user ID identity
+    const newRequest: MovieRequest = {
+      id: `mreq-${Date.now()}`,
+      member_id: currentUser.id, // Strictly set by server identity
+      member_name: currentUser.name,
+      member_number: currentUser.member_number,
+      movie_title: titleTrimmed,
+      release_year: requestData.release_year.trim() || 'N/A',
+      thumbnail_url: requestData.thumbnail_url?.trim() || undefined,
+      status: 'PENDING',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setMovieRequests((prev) => [newRequest, ...prev]);
+    localStorage.setItem('slb_movie_requests', JSON.stringify([newRequest, ...movieRequests]));
+
+    // Notify admins about new movie request
+    const newNotif: AppNotification = {
+      id: `notif-mreq-${Date.now()}`,
+      member_id: 'admin',
+      type: 'SYSTEM',
+      title: 'নতুন Movie Request',
+      message: `${currentUser.name} (${currentUser.member_number}) "${newRequest.movie_title}" মুভির জন্য রিকোয়েস্ট পাঠিয়েছেন।`,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+
+    return { success: true, request: newRequest };
+  };
+
+  const updateMovieRequestStatus = async (
+    requestId: string,
+    status: MovieRequestStatus,
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'সিকিউরিটি অ্যালার্ট: রিকোয়েস্ট স্ট্যাটাস পরিবর্তনের অনুমতি নেই।' };
+    }
+
+    const targetReq = movieRequests.find((r) => r.id === requestId);
+    if (!targetReq) return { success: false, error: 'Movie request not found.' };
+
+    const updatedRequests = movieRequests.map((r) =>
+      r.id === requestId ? { ...r, status, admin_notes: notes || r.admin_notes, updated_at: new Date().toISOString() } : r
+    );
+
+    setMovieRequests(updatedRequests);
+    localStorage.setItem('slb_movie_requests', JSON.stringify(updatedRequests));
+
+    // If status updated to ADDED, send notification to requester member!
+    if (status === 'ADDED' || status === 'APPROVED') {
+      const userNotif: AppNotification = {
+        id: `notif-madded-${Date.now()}`,
+        member_id: targetReq.member_id,
+        type: 'SYSTEM',
+        title: 'Movie Request Update',
+        message: `আপনার রিকোয়েস্ট করা "${targetReq.movie_title}" মুভিটি Movie Lover লাইব্রেরিতে যোগ করা হয়েছে!`,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      };
+      setNotifications((prev) => [userNotif, ...prev]);
+    }
+
+    addAuditLog('MOVIE_REQUEST_UPDATED', 'MOVIE_REQUEST', requestId, `Status updated to ${status}. Notes: ${notes || 'None'}`);
+    return { success: true };
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -2342,6 +2575,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addAuditLog,
         auditLogs,
         refreshData,
+        movies,
+        movieRequests,
+        addMovie,
+        updateMovie,
+        deleteMovie,
+        submitMovieRequest,
+        updateMovieRequestStatus,
       }}
     >
       {children}

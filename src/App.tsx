@@ -14,6 +14,7 @@ import { MovieLoverView } from './components/member/MovieLoverView';
 import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { StatusGateScreen } from './components/auth/StatusGateScreen';
+import { BottomNavBar } from './components/layout/BottomNavBar';
 import { Flame, CheckCircle2, Shield, Heart } from 'lucide-react';
 
 function MainContent() {
@@ -58,7 +59,7 @@ function MainContent() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 md:pb-8">
         {/* Active Special Support Duty Warning (if penalized) */}
         <SpecialSupportDutyBanner onGoToSupport={() => setCurrentTab('support')} />
 
@@ -82,7 +83,7 @@ function MainContent() {
 
         {currentTab === 'leaderboard' && <LeaderboardView />}
 
-        {currentTab === 'entertainment' && <MovieLoverView />}
+        {(currentTab === 'entertainment' || currentTab === 'movies') && <MovieLoverView />}
 
         {currentTab === 'notices' && <NoticeSection />}
 
@@ -134,6 +135,13 @@ function MainContent() {
       <LinkSubmissionModal
         isOpen={submitModalOpen}
         onClose={() => setSubmitModalOpen(false)}
+      />
+
+      {/* Mobile Bottom Navigation Bar */}
+      <BottomNavBar
+        currentTab={currentTab}
+        setCurrentTab={setCurrentTab}
+        onOpenSubmitModal={() => setSubmitModalOpen(true)}
       />
     </div>
   );

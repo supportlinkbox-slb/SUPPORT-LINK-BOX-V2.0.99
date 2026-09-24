@@ -301,6 +301,40 @@ export const MemberProfileView: React.FC = () => {
           </div>
         </form>
       </div>
+
+      {/* Account Switch & Session Security Box */}
+      <div className="bg-red-950/20 border border-red-900/40 rounded-3xl p-6 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-red-900/40 pb-4 gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-red-400" />
+              <h3 className="text-base font-bold text-white">সিকিউর লগআউট ও একাউন্ট সুইচ সেন্টার</h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              অন্য একাউন্টে লগইন করতে সিকিউরলি Supabase Auth সেশন ক্লোজ করুন। প্রতিটি একাউন্টের পয়েন্ট, হিসেব ও ডাটা পুরোপুরি আলাদা গণনা হবে।
+            </p>
+          </div>
+
+          <button
+            onClick={async () => {
+              await logout();
+              localStorage.clear();
+              sessionStorage.clear();
+            }}
+            className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-red-600/30 shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>সেশন টার্মিনেট ও অন্য একাউন্টে সুইচ করুন</span>
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Supabase Auth ID: <code className="text-cyan-400 font-mono">{currentUser.auth_user_id || currentUser.id}</code>
+          </span>
+          <span className="text-emerald-400 font-bold">✓ Active JWT Encrypted Session</span>
+        </div>
+      </div>
     </div>
   );
 };

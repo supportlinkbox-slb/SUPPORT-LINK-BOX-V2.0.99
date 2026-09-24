@@ -489,6 +489,19 @@ export interface SystemSettings {
   maintenance_mode: boolean;
 }
 
+export interface SystemConfig {
+  submission_start_time: string; // "10:00"
+  submission_end_time: string; // "16:50"
+  all_done_start_time: string; // "17:00"
+  all_done_deadline_time: string; // "24:00"
+  recovery_end_time: string; // "10:00"
+  max_links_per_member: number;
+  fastest_bonus_prizes: number[]; // [10, 8, 6, 4, 2]
+  base_all_done_points: number; // 5
+  community_name: string;
+  timezone: string; // "Asia/Dhaka" (BDT = UTC+6)
+}
+
 export interface AdminSupportContact {
   id: string;
   admin_id: string;
@@ -501,12 +514,18 @@ export interface AdminSupportContact {
   updated_at: string;
 }
 
+export type MovieStatus = 'Draft' | 'Published' | 'Hidden' | 'Archived';
+
 export interface MovieItem {
   id: string;
   title: string;
+  release_year: string;
   category: 'Movie' | 'Web Series' | 'Drama' | 'Short Film';
   poster_url: string;
   description?: string;
+  language?: string;
+  quality?: string;
+  status: MovieStatus;
   resolutions: {
     res_480p?: string;
     res_720p?: string;
@@ -516,5 +535,28 @@ export interface MovieItem {
   gdflex_url?: string;
   created_at: string;
   created_by?: string;
+}
+
+export type MovieRequestStatus =
+  | 'PENDING'
+  | 'REVIEWING'
+  | 'APPROVED'
+  | 'ADDED'
+  | 'REJECTED'
+  | 'ALREADY_AVAILABLE'
+  | 'CANCELLED';
+
+export interface MovieRequest {
+  id: string;
+  member_id: string;
+  member_name: string;
+  member_number: string;
+  movie_title: string;
+  release_year: string;
+  thumbnail_url?: string;
+  status: MovieRequestStatus;
+  admin_notes?: string;
+  created_at: string;
+  updated_at: string;
 }
 

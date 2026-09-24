@@ -1,14 +1,20 @@
-import React from 'react';
-import { ShieldAlert, LogOut, Clock, Ban, UserX } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShieldAlert, LogOut, Clock, Ban, UserX, PlayCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MemberProfile } from '../../types';
+import { DemoAdModal } from '../common/DemoAdModal';
 
 interface StatusGateScreenProps {
   user: MemberProfile;
 }
 
 export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
-  const { logout } = useApp();
+  const { logout, updateMemberStatus } = useApp();
+  const [isAdOpen, setIsAdOpen] = useState(false);
+
+  const handleAdCompleted = async () => {
+    await updateMemberStatus(user.id, 'ACTIVE');
+  };
 
   const getStatusDetails = () => {
     switch (user.status) {
@@ -112,6 +118,16 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
           </div>
         </div>
 
+        {(user.status === 'SUSPENDED' || user.status === 'FROZEN' || user.status === 'INACTIVE') && (
+          <button
+            onClick={() => setIsAdOpen(true)}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25"
+          >
+            <PlayCircle className="w-4 h-4 fill-slate-950" />
+            <span>স্পন্সরড অ্যাড দেখে আইডি রি-অ্যাক্টিভ করুন</span>
+          </button>
+        )}
+
         <button
           onClick={logout}
           className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center justify-center gap-2 border border-slate-700"
@@ -120,6 +136,14 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
           <span>অন্য অ্যাকাউন্টে লগইন করুন (Logout)</span>
         </button>
       </div>
+
+      <DemoAdModal
+        isOpen={isAdOpen}
+        onClose={() => setIsAdOpen(false)}
+        onAdCompleted={handleAdCompleted}
+        adTitle="অ্যাডের মাধ্যমে অ্যাকাউন্ট ইনস্ট্যান্ট রি-অ্যাক্টিভেশন"
+        durationSeconds={15}
+      />
     </div>
   );
 };

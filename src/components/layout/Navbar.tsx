@@ -181,6 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div
                   className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/60 cursor-pointer hover:bg-slate-800 transition"
                   onClick={() => setCurrentTab('profile')}
+                  title="মেম্বার প্রোফাইল"
                 >
                   <img
                     src={currentUser.profile_photo_url}
@@ -195,6 +196,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="text-[10px] text-cyan-400 font-mono">{currentUser.member_number}</div>
                   </div>
                 </div>
+
+                {/* Secure Logout + Switch Account Button */}
+                <button
+                  onClick={async () => {
+                    await logout();
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    onOpenAuth();
+                  }}
+                  className="p-2 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 hover:text-white transition text-xs font-bold flex items-center gap-1.5"
+                  title="লগআউট ও একাউন্ট পরিবর্তন (Supabase Auth Terminate)"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline text-[11px]">লগআউট / সুইচ</span>
+                </button>
               </div>
             ) : (
               <button
@@ -272,17 +288,32 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div className="pt-3 mt-2 border-t border-slate-800 flex items-center justify-between">
             {currentUser ? (
-              <div className="flex items-center gap-2">
-                <img
-                  src={currentUser.profile_photo_url}
-                  alt={currentUser.name}
-                  className="w-8 h-8 rounded-full object-cover"
-                />
-                <div>
-                  <div className="text-xs font-bold text-white">{currentUser.name}</div>
-                  <div className="text-[11px] text-cyan-400 font-mono">{currentUser.member_number} • {currentUser.points} pts</div>
+              <>
+                <div className="flex items-center gap-2">
+                  <img
+                    src={currentUser.profile_photo_url}
+                    alt={currentUser.name}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-white">{currentUser.name}</div>
+                    <div className="text-[11px] text-cyan-400 font-mono">{currentUser.member_number} • {currentUser.points} pts</div>
+                  </div>
                 </div>
-              </div>
+                <button
+                  onClick={async () => {
+                    await logout();
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    setMobileMenuOpen(false);
+                    onOpenAuth();
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-red-950/60 border border-red-800/60 text-red-300 font-bold text-xs flex items-center gap-1 hover:bg-red-900 transition"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>লগআউট / সুইচ</span>
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => {

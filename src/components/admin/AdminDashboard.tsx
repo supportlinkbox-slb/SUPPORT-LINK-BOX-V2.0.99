@@ -31,6 +31,7 @@ import { formatToBDT } from '../../utils/bangladeshTime';
 import { AdminInviteMember } from './AdminInviteMember';
 import { AdminInviteList } from './AdminInviteList';
 import { AdminSettingsPanel } from './AdminSettingsPanel';
+import { MovieLoverAdmin } from './MovieLoverAdmin';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -47,7 +48,7 @@ export const AdminDashboard: React.FC = () => {
     updateMemberStatus,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'OVERVIEW' | 'INVITE' | 'SETTINGS'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'OVERVIEW' | 'INVITE' | 'SETTINGS' | 'MOVIE_LOVER'>('REQUESTS');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -279,6 +280,16 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           <span>System Settings (সেটিংস প্যানেল)</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('MOVIE_LOVER')}
+          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+            activeTab === 'MOVIE_LOVER'
+              ? 'border-purple-500 text-purple-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <span>Movie Lover (মুভি ম্যানেজমেন্ট)</span>
         </button>
       </div>
 
@@ -589,6 +600,9 @@ export const AdminDashboard: React.FC = () => {
 
       {/* TAB 5: SYSTEM SETTINGS PANEL */}
       {activeTab === 'SETTINGS' && <AdminSettingsPanel />}
+
+      {/* TAB 6: MOVIE LOVER SYSTEM */}
+      {activeTab === 'MOVIE_LOVER' && <MovieLoverAdmin />}
 
       {/* Member Details Modal */}
       {isDetailsOpen && selectedMember && (

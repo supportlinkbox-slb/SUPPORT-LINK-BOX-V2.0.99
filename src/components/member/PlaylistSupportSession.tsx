@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DailyLink, SupportLinkStatus } from '../../types';
+import { CommentSuggestionsDropdown } from './CommentSuggestionsDropdown';
 import { openFacebookPostExternally, isValidFacebookUrl } from '../../utils/facebookLinks';
 import { getBengaliSupportErrorMessage } from '../../utils/bengaliErrors';
 import { formatToBDT } from '../../utils/bangladeshTime';
@@ -442,7 +443,9 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
                 </span>
               )}
 
-              {/* Report button hook */}
+              {/* Comment Suggestions & Report button hooks */}
+              <CommentSuggestionsDropdown />
+
               <button
                 onClick={() => setReportingLink(currentLink)}
                 title="সমস্যা রিপোর্ট করুন"
