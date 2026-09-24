@@ -22,6 +22,9 @@ import {
   Filter,
   Eye,
   Info,
+  UserPlus,
+  Settings,
+  Film,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MemberProfile, UserRole, MemberStatus } from '../../types';
@@ -223,74 +226,142 @@ export const AdminDashboard: React.FC = () => {
         />
       </div>
 
-      {/* Navigation Tabs (Classy Horizontal Scrollable Pills) */}
-      <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2 overflow-x-auto scrollbar-none whitespace-nowrap snap-x">
-        <button
-          onClick={() => setActiveTab('REQUESTS')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
-            activeTab === 'REQUESTS'
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
-              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <span>অনুরোধ (Requests)</span>
-          {pendingMembers.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 animate-bounce">
-              {pendingMembers.length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('MEMBERS')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
-            activeTab === 'MEMBERS'
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
-              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <span>সদস্য তালিকা (Members)</span>
-          <span className="text-slate-500 text-[11px]">({members.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('OVERVIEW')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
-            activeTab === 'OVERVIEW'
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
-              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <span>সারসংক্ষেপ (Overview)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('INVITE')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
-            activeTab === 'INVITE'
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
-              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <span>ইনভাইট (Invite Members)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('SETTINGS')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
-            activeTab === 'SETTINGS'
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
-              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <span>সেটিংস (System Settings)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('MOVIE_LOVER')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
-            activeTab === 'MOVIE_LOVER'
-              ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-lg shadow-purple-500/10 font-black'
-              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <span>মুভি ম্যানেজমেন্ট (Movie Lover)</span>
-        </button>
+      {/* Admin Module Control Grid (Clean Grid Layout - No Horizontal Sliding Required) */}
+      <div className="space-y-2 pt-1">
+        <div className="text-xs font-bold text-slate-400 flex items-center justify-between">
+          <span>অ্যাডমিন ম্যানেজমেন্ট প্যানেল (Admin Control Hub)</span>
+          <span className="text-[10px] text-cyan-400 font-mono">SELECT MODULE</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+          {/* Module 1: Requests */}
+          <button
+            onClick={() => setActiveTab('REQUESTS')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'REQUESTS'
+                ? 'bg-gradient-to-br from-cyan-950 via-slate-900 to-slate-900 border-cyan-500 text-white shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'REQUESTS' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-cyan-400 group-hover:bg-slate-700'}`}>
+                <UserCheck className="w-4 h-4" />
+              </div>
+              {pendingMembers.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 animate-bounce">
+                  {pendingMembers.length}
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">অনুরোধ (Requests)</div>
+              <div className="text-[10px] text-slate-400 truncate">রেজিস্ট্রেশন আবেদন</div>
+            </div>
+          </button>
+
+          {/* Module 2: Members Directory */}
+          <button
+            onClick={() => setActiveTab('MEMBERS')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'MEMBERS'
+                ? 'bg-gradient-to-br from-cyan-950 via-slate-900 to-slate-900 border-cyan-500 text-white shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'MEMBERS' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-cyan-400 group-hover:bg-slate-700'}`}>
+                <Users className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                {members.length}
+              </span>
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">সদস্য তালিকা</div>
+              <div className="text-[10px] text-slate-400 truncate">সকল সক্রিয় মেম্বার</div>
+            </div>
+          </button>
+
+          {/* Module 3: Operational Overview */}
+          <button
+            onClick={() => setActiveTab('OVERVIEW')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'OVERVIEW'
+                ? 'bg-gradient-to-br from-cyan-950 via-slate-900 to-slate-900 border-cyan-500 text-white shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'OVERVIEW' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-cyan-400 group-hover:bg-slate-700'}`}>
+                <TrendingUp className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">সারসংক্ষেপ</div>
+              <div className="text-[10px] text-slate-400 truncate">অপারেশনাল ওভারভিউ</div>
+            </div>
+          </button>
+
+          {/* Module 4: Admin Invite */}
+          <button
+            onClick={() => setActiveTab('INVITE')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'INVITE'
+                ? 'bg-gradient-to-br from-cyan-950 via-slate-900 to-slate-900 border-cyan-500 text-white shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'INVITE' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-cyan-400 group-hover:bg-slate-700'}`}>
+                <UserPlus className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">ইনভাইট</div>
+              <div className="text-[10px] text-slate-400 truncate">নতুন সদস্য টোকেন</div>
+            </div>
+          </button>
+
+          {/* Module 5: System Settings */}
+          <button
+            onClick={() => setActiveTab('SETTINGS')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'SETTINGS'
+                ? 'bg-gradient-to-br from-cyan-950 via-slate-900 to-slate-900 border-cyan-500 text-white shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'SETTINGS' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-cyan-400 group-hover:bg-slate-700'}`}>
+                <Settings className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">সেটিংস</div>
+              <div className="text-[10px] text-slate-400 truncate">সিস্টেম কনফিগ</div>
+            </div>
+          </button>
+
+          {/* Module 6: Movie Lover */}
+          <button
+            onClick={() => setActiveTab('MOVIE_LOVER')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'MOVIE_LOVER'
+                ? 'bg-gradient-to-br from-purple-950 via-slate-900 to-slate-900 border-purple-500 text-white shadow-lg shadow-purple-500/20 ring-1 ring-purple-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'MOVIE_LOVER' ? 'bg-purple-500 text-white font-bold' : 'bg-slate-800 text-purple-400 group-hover:bg-slate-700'}`}>
+                <Film className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">মুভি লাভার</div>
+              <div className="text-[10px] text-slate-400 truncate">মুভি ম্যানেজমেন্ট</div>
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* TAB 1: REGISTRATION REQUESTS */}
