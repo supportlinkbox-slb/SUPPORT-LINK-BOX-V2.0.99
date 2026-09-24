@@ -1,0 +1,2 @@
+-- Refer to /supabase/SUPPORT_LINK_BOX_MASTER_RECONCILIATION.sql for full master SQL.
+-- This file is created at root for immediate download/reference.

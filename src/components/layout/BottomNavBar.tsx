@@ -29,17 +29,17 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/80 px-2 pt-1.5 pb-2 shadow-2xl transition-all">
       <div className="grid grid-cols-5 items-center justify-between max-w-md mx-auto">
-        {/* Tab 1: Home / Links */}
+        {/* Tab 1: Home Dashboard */}
         <button
-          onClick={() => setCurrentTab('links')}
+          onClick={() => setCurrentTab('home')}
           className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-xl transition ${
-            currentTab === 'links'
+            currentTab === 'home' || currentTab === 'links'
               ? 'text-cyan-400 bg-cyan-500/10 font-bold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           <LinkIcon className="w-5 h-5" />
-          <span className="text-[10px] tracking-tight mt-0.5 truncate">আজকের লিংক</span>
+          <span className="text-[10px] tracking-tight mt-0.5 truncate">হোম</span>
         </button>
 
         {/* Tab 2: Support Session */}
@@ -86,23 +86,17 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           <span className="text-[10px] tracking-tight mt-0.5 truncate">লিডারবোর্ড</span>
         </button>
 
-        {/* Tab 5: Admin or Profile */}
+        {/* Tab 5: Profile & Settings */}
         <button
-          onClick={() => setCurrentTab(canAccessAdmin ? 'admin' : 'profile')}
+          onClick={() => setCurrentTab('profile')}
           className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-xl transition ${
-            currentTab === 'admin' || currentTab === 'profile'
+            currentTab === 'profile'
               ? 'text-purple-400 bg-purple-500/10 font-bold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          {canAccessAdmin ? (
-            <Settings className="w-5 h-5" />
-          ) : (
-            <User className="w-5 h-5" />
-          )}
-          <span className="text-[10px] tracking-tight mt-0.5 truncate">
-            {canAccessAdmin ? 'এডমিন' : 'প্রোফাইল'}
-          </span>
+          <User className="w-5 h-5" />
+          <span className="text-[10px] tracking-tight mt-0.5 truncate">প্রোফাইল</span>
         </button>
       </div>
     </div>

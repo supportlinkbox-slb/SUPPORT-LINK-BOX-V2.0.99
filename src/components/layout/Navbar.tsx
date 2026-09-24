@@ -55,8 +55,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const navItems = [
-    { id: 'links', label: 'আজকের লিংক', icon: LinkIcon },
-    { id: 'support', label: "Support Session", icon: Flame, badge: pendingRequiredSupportCount > 0 ? pendingRequiredSupportCount : null },
+    { id: 'home', label: 'হোম ড্যাশবোর্ড', icon: LinkIcon },
+    { id: 'support', label: 'Support Link Box', icon: Flame, badge: pendingRequiredSupportCount > 0 ? pendingRequiredSupportCount : null },
     { id: 'alldone', label: 'All Done Box', icon: CheckCircle2, status: isAllDoneSubmittedToday },
     { id: 'leaderboard', label: 'লিডারবোর্ড', icon: Award },
     { id: 'entertainment', label: 'মুভি লাভার', icon: Film },

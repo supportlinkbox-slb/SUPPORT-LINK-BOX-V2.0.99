@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
+import { HomeDashboardView } from './components/member/HomeDashboardView';
 import { DailyLinksView } from './components/member/DailyLinksView';
 import { PlaylistSupportSession } from './components/member/PlaylistSupportSession';
 import { AllDoneSection } from './components/alldone/AllDoneSection';
@@ -64,14 +65,14 @@ function MainContent() {
         <SpecialSupportDutyBanner onGoToSupport={() => setCurrentTab('support')} />
 
         {/* Tab Routing */}
-        {currentTab === 'links' && (
-          <DailyLinksView
+        {(currentTab === 'home' || currentTab === 'links') && (
+          <HomeDashboardView
             onOpenSubmitModal={() => setSubmitModalOpen(true)}
-            onGoToSupportSession={() => setCurrentTab('support')}
+            onNavigateTab={(tab) => setCurrentTab(tab)}
           />
         )}
 
-        {currentTab === 'support' && (
+        {(currentTab === 'support' || currentTab === 'all_links') && (
           <PlaylistSupportSession
             onGoToAllDone={() => setCurrentTab('alldone')}
           />
@@ -100,7 +101,7 @@ function MainContent() {
         )}
 
         {currentTab === 'profile' && (
-          <MemberProfileView />
+          <MemberProfileView onNavigateTab={(tab) => setCurrentTab(tab)} />
         )}
 
         {currentTab === 'admin' && (

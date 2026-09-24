@@ -14,11 +14,18 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  Settings,
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
 
-export const MemberProfileView: React.FC = () => {
+interface MemberProfileViewProps {
+  onNavigateTab?: (tab: string) => void;
+}
+
+export const MemberProfileView: React.FC<MemberProfileViewProps> = ({ onNavigateTab }) => {
   const { currentUser, pointLedger, dailyLinks, allDoneRecords, logout, updatePassword, isConfigured } = useApp();
 
   const [newPassword, setNewPassword] = useState('');
@@ -30,6 +37,7 @@ export const MemberProfileView: React.FC = () => {
 
   if (!currentUser) return null;
 
+  const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'DEVELOPER';
   const userLinks = dailyLinks.filter((l) => l.owner_id === currentUser.id);
   const userAllDones = allDoneRecords.filter((r) => r.member_id === currentUser.id);
   const userPointTxs = pointLedger.filter((p) => p.member_id === currentUser.id);
@@ -62,6 +70,40 @@ export const MemberProfileView: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Admin Power Control Panel Trigger Bar (Visible ONLY for Admins / Developers) */}
+      {isAdmin && (
+        <div className="bg-gradient-to-r from-purple-950/90 via-slate-900 to-indigo-950 border-2 border-purple-500/60 rounded-3xl p-5 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden">
+          <div className="absolute right-0 top-0 w-64 h-64 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+          <div className="flex items-center gap-3.5 relative z-10">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-purple-500/30 shrink-0">
+              <Shield className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-purple-500 text-white tracking-wide">
+                  ADMIN POWER PANEL
+                </span>
+                <span className="text-xs font-mono font-bold text-purple-300">ROLE: {currentUser.role}</span>
+              </div>
+              <h2 className="text-base font-bold text-white mt-0.5">অ্যাডমিন কন্ট্রোল টুলস ও সিস্টেম ম্যানেজমেন্ট</h2>
+              <p className="text-xs text-purple-200/80">সদস্য অনুমোদন, পয়েন্ট সিস্টেম, ফেক অল ডান রিভিউ ও সেটিংস নিয়ন্ত্রণ করুন।</p>
+            </div>
+          </div>
+
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('admin')}
+              className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-black text-xs rounded-2xl shadow-xl shadow-purple-500/30 transition transform hover:-translate-y-0.5 flex items-center gap-2 shrink-0 border border-purple-400/30"
+            >
+              <Settings className="w-4 h-4" />
+              <span>অ্যাডমিন প্যানেলে প্রবেশ করুন</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Profile Header Banner */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">

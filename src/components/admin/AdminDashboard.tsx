@@ -223,73 +223,73 @@ export const AdminDashboard: React.FC = () => {
         />
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-800 gap-2">
+      {/* Navigation Tabs (Classy Horizontal Scrollable Pills) */}
+      <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2 overflow-x-auto scrollbar-none whitespace-nowrap snap-x">
         <button
           onClick={() => setActiveTab('REQUESTS')}
-          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
             activeTab === 'REQUESTS'
-              ? 'border-cyan-500 text-cyan-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
+              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
         >
-          <span>Registration Requests (অনুরোধ)</span>
+          <span>অনুরোধ (Requests)</span>
           {pendingMembers.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 animate-pulse">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 animate-bounce">
               {pendingMembers.length}
             </span>
           )}
         </button>
         <button
           onClick={() => setActiveTab('MEMBERS')}
-          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
             activeTab === 'MEMBERS'
-              ? 'border-cyan-500 text-cyan-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
+              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
         >
-          <span>All Members Directory (সদস্য তালিকা)</span>
+          <span>সদস্য তালিকা (Members)</span>
           <span className="text-slate-500 text-[11px]">({members.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('OVERVIEW')}
-          className={`pb-3 px-4 text-xs font-bold transition border-b-2 ${
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
             activeTab === 'OVERVIEW'
-              ? 'border-cyan-500 text-cyan-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
+              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
         >
-          <span>Operational Overview (সারসংক্ষেপ)</span>
+          <span>সারসংক্ষেপ (Overview)</span>
         </button>
         <button
           onClick={() => setActiveTab('INVITE')}
-          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
             activeTab === 'INVITE'
-              ? 'border-cyan-500 text-cyan-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
+              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
         >
-          <span>Admin Invite (নতুন সদস্য)</span>
+          <span>ইনভাইট (Invite Members)</span>
         </button>
         <button
           onClick={() => setActiveTab('SETTINGS')}
-          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
             activeTab === 'SETTINGS'
-              ? 'border-cyan-500 text-cyan-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-lg shadow-cyan-500/10 font-black'
+              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
         >
-          <span>System Settings (সেটিংস প্যানেল)</span>
+          <span>সেটিংস (System Settings)</span>
         </button>
         <button
           onClick={() => setActiveTab('MOVIE_LOVER')}
-          className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 shrink-0 snap-start border ${
             activeTab === 'MOVIE_LOVER'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-lg shadow-purple-500/10 font-black'
+              : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
         >
-          <span>Movie Lover (মুভি ম্যানেজমেন্ট)</span>
+          <span>মুভি ম্যানেজমেন্ট (Movie Lover)</span>
         </button>
       </div>
 
