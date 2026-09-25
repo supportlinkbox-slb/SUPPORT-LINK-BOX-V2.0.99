@@ -16,6 +16,16 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .catch(function(err) {
+              console.warn('Monetag SW registration note:', err);
+            });
+        });
+      }
+    </script>
   </body>
 </html>
 
