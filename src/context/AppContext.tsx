@@ -517,7 +517,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setNotifications(notifRes.data);
           }
         } else {
-          setCurrentUser(profRes.data); // Kept for status screen gate
+          await authApi.signOut();
+          setCurrentUser(null);
         }
 
         // Section 46: Only load full member directory if user has admin/developer privileges
@@ -548,14 +549,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (session?.user && isMounted) {
           const profRes = await membersApi.getCurrentProfile();
           if (profRes.success && profRes.data && isMounted) {
-            setCurrentUser(profRes.data);
             if (profRes.data.status === 'ACTIVE') {
+              setCurrentUser(profRes.data);
               const suppRes = await supportApi.getTodaySupportRecords(todayDate, profRes.data.id);
               if (suppRes.success && suppRes.data && isMounted) {
                 setSupportedLinkIds(new Set(suppRes.data.map((r) => r.link_id)));
               }
+            } else {
+              // NON-ACTIVE USERS MUST NOT KEEP SESSIONS: Sign out immediately
+              await authApi.signOut();
+              setCurrentUser(null);
             }
           } else if (isMounted) {
+            await authApi.signOut();
             setCurrentUser(null);
           }
         } else if (isMounted) {
@@ -592,12 +598,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (session?.user) {
           const profRes = await membersApi.getCurrentProfile();
           if (profRes.success && profRes.data && isMounted) {
-            setCurrentUser(profRes.data);
             if (profRes.data.status === 'ACTIVE') {
+              setCurrentUser(profRes.data);
               const suppRes = await supportApi.getTodaySupportRecords(todayDate, profRes.data.id);
               if (suppRes.success && suppRes.data && isMounted) {
                 setSupportedLinkIds(new Set(suppRes.data.map((r) => r.link_id)));
               }
+            } else {
+              // Strictly reject non-active session logins
+              await authApi.signOut();
+              setCurrentUser(null);
             }
           }
         }

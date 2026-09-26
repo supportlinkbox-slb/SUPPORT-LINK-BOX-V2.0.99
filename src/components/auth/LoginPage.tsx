@@ -254,10 +254,36 @@ export const LoginPage: React.FC = () => {
 
     if (mode === 'REGISTER') {
       let initialPhotoUrl = (profilePhotoUrl || '').trim();
-      
       const fbValidation = validateAndExtractFacebookProfile((facebookUrl || '').trim());
-      
-      // Step 2: Sign Up First to establish authentication context
+
+      // Step 1: Upload Avatar Photo before calling register if file provided
+      if (photoInputMode === 'UPLOAD' && profilePhotoFile) {
+        try {
+          const compressedFile = await compressImage(profilePhotoFile);
+          const fileExt = 'jpg';
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, compressedFile, { upsert: true });
+
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('avatars')
+              .getPublicUrl(fileName);
+
+            if (publicUrl) {
+              initialPhotoUrl = publicUrl;
+            }
+          } else {
+            console.warn('Avatar upload storage warning:', uploadError);
+          }
+        } catch (uploadErr) {
+          console.warn('Avatar upload exception:', uploadErr);
+        }
+      }
+
+      // Step 2: Perform Sign Up with the uploaded photo URL
       const res = await register({
         email: trimmedEmail,
         pass: password,
@@ -277,38 +303,8 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // Step 3: Upload Avatar Photo using the established account session if file provided
-      if (photoInputMode === 'UPLOAD' && profilePhotoFile) {
-        try {
-          const compressedFile = await compressImage(profilePhotoFile);
-          const fileExt = 'jpg';
-          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-          const filePath = `${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('avatars')
-            .upload(filePath, compressedFile, { upsert: true });
-
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('avatars')
-              .getPublicUrl(filePath);
-
-            // Update photo_url in members table for newly created user
-            if (publicUrl) {
-              const { data: userData } = await supabase.auth.getUser();
-              if (userData?.user) {
-                await supabase
-                  .from('members')
-                  .update({ photo_url: publicUrl, status: 'PENDING' })
-                  .eq('auth_user_id', userData.user.id);
-              }
-            }
-          }
-        } catch (uploadErr) {
-          console.warn('Avatar upload warning:', uploadErr);
-        }
-      }
+      // Force instant signout after registration to ensure non-active users cannot bypass approval
+      await supabase.auth.signOut();
 
       setPassword('');
       setConfirmPassword('');

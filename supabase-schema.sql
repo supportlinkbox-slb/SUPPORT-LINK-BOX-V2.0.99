@@ -1452,21 +1452,16 @@ BEGIN
     INTO v_next_int FROM public.members;
     v_member_num := 'SLB-' || LPAD(v_next_int::text, 3, '0');
 
-    IF v_norm_email IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
-        v_initial_role := 'DEVELOPER';
-        v_initial_status := 'ACTIVE';
-        v_is_dev := true;
-    END IF;
+    v_initial_role := 'MEMBER'::public.user_role;
+    v_initial_status := 'PENDING'::public.member_status;
+    v_is_dev := false;
 
-    v_name := CASE 
-        WHEN v_is_dev THEN 'Md shihab khan'
-        ELSE COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'name'), ''), split_part(v_norm_email, '@', 1))
-    END;
+    SELECT COALESCE(MAX(NULLIF(regexp_replace(member_number, '\D', '', 'g'), '')::integer), 100) + 1
+    INTO v_next_int FROM public.members;
+    v_member_num := 'SLB-' || LPAD(v_next_int::text, 3, '0');
 
-    v_username := CASE 
-        WHEN v_is_dev THEN 'Shihab_Vai'
-        ELSE COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''), split_part(v_norm_email, '@', 1) || '_' || substr(md5(random()::text), 1, 4))
-    END;
+    v_name := COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'name'), ''), split_part(v_norm_email, '@', 1));
+    v_username := COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''), split_part(v_norm_email, '@', 1) || '_' || substr(md5(random()::text), 1, 4));
 
     INSERT INTO public.members (
         auth_user_id,
@@ -1494,29 +1489,30 @@ BEGIN
         is_verified
     ) VALUES (
         NEW.id,
-        CASE WHEN v_is_dev THEN 'SLB-001' ELSE v_member_num END,
+        v_member_num,
         v_name,
         COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'real_name'), ''), v_name),
         v_username,
         LOWER(TRIM(v_username)),
         v_norm_email,
-        v_initial_role,
-        CASE WHEN v_is_dev THEN 'ACTIVE'::member_status ELSE 'PENDING'::member_status END,
-        CASE WHEN v_is_dev THEN 'MD SHIHAB KHAN' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_name'), '') END,
-        CASE WHEN v_is_dev THEN 'MD SHIHAB KHAN' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_name_original'), '') END,
-        CASE WHEN v_is_dev THEN 'https://www.facebook.com/SmShihab2.0' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_url'), '') END,
-        CASE WHEN v_is_dev THEN 'https://www.facebook.com/SmShihab2.0' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_profile_url'), '') END,
-        CASE WHEN v_is_dev THEN 'smshihab2.0' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_identity_key'), '') END,
-        CASE WHEN v_is_dev THEN 'username' ELSE NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_identity_type'), '') END,
-        CASE WHEN v_is_dev THEN 'https://i.ibb.co/DPDHM9Vm/1789329610483.jpg' ELSE COALESCE(NEW.raw_user_meta_data->>'profile_photo_url', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80') END,
-        CASE WHEN v_is_dev THEN 1500 ELSE 0 END,
-        CASE WHEN v_is_dev THEN 120 ELSE 0 END,
-        CASE WHEN v_is_dev THEN 150 ELSE 0 END,
-        CASE WHEN v_is_dev THEN 2500 ELSE 0 END,
-        CASE WHEN v_is_dev THEN 150 ELSE 0 END,
+        'MEMBER'::public.user_role,
+        'PENDING'::public.member_status,
+        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_name'), ''),
+        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_name_original'), ''),
+        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_url'), ''),
+        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_profile_url'), ''),
+        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_identity_key'), ''),
+        NULLIF(TRIM(NEW.raw_user_meta_data->>'facebook_identity_type'), ''),
+        COALESCE(NEW.raw_user_meta_data->>'profile_photo_url', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'),
+        0,
+        0,
+        0,
+        0,
+        0,
         'main',
-        v_is_dev
-    ) ON CONFLICT (auth_user_id) DO NOTHING;
+        false
+    ) ON CONFLICT (auth_user_id) DO UPDATE SET
+        status = 'PENDING'::public.member_status;
 
     RETURN NEW;
 END;

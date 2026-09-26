@@ -172,6 +172,7 @@ export const authApi = {
             facebook_identity_type: params.facebookIdentityType,
             profile_photo_url: params.profilePhotoUrl?.trim(),
             status: 'PENDING',
+            role: 'MEMBER',
           },
         },
       });
@@ -188,18 +189,22 @@ export const authApi = {
         };
       }
 
+      // CRITICAL SECURITY ENFORCEMENT: Always sign out immediately after registration.
+      // Registration MUST NOT result in an active authenticated session.
+      await supabase.auth.signOut();
+
       const needsEmailConfirmation = !data.session && Boolean(data.user);
 
       return {
         success: true,
         data: {
           user: data.user,
-          session: data.session,
+          session: null,
           needsEmailConfirmation,
         },
         message: needsEmailConfirmation
           ? 'আপনার Email-এ Confirmation link পাঠানো হয়েছে।'
-          : 'Registration সফল হয়েছে।',
+          : 'Registration সফল হয়েছে। অ্যাডমিন এপ্রুভালের জন্য অপেক্ষা করুন।',
       };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
@@ -218,6 +223,7 @@ export const authApi = {
       }
 
       // 1. Invoke server-side auth-login Edge Function for rate limiting, lock check & identity resolution
+      let sessionData: any = null;
       try {
         const { data: fnData, error: fnError } = await supabase.functions.invoke('auth-login', {
           body: { identifier: trimmedId, password },
@@ -229,7 +235,7 @@ export const authApi = {
             if (setSessionErr) {
               return { success: false, error: formatSupabaseError(setSessionErr) };
             }
-            return { success: true, data: fnData.data };
+            sessionData = fnData.data;
           } else if (fnData.success === false && fnData.error) {
             return { success: false, error: fnData.error };
           }
@@ -239,27 +245,49 @@ export const authApi = {
       }
 
       // 2. Direct Auth Fallback (if Edge Function runtime is unreachable)
-      let targetEmail = trimmedId.toLowerCase();
-      if (!trimmedId.includes('@')) {
-        const { data: member } = await supabase
-          .from('members')
-          .select('email')
-          .ilike('member_number', trimmedId)
-          .maybeSingle();
+      if (!sessionData) {
+        let targetEmail = trimmedId.toLowerCase();
+        if (!trimmedId.includes('@')) {
+          const { data: member } = await supabase
+            .from('members')
+            .select('email')
+            .ilike('member_number', trimmedId)
+            .maybeSingle();
 
-        if (!member || !member.email) {
-          return { success: false, error: 'ভুল Email/Member ID অথবা Password।' };
+          if (!member || !member.email) {
+            return { success: false, error: 'ভুল Email/Member ID অথবা Password।' };
+          }
+          targetEmail = member.email.toLowerCase().trim();
         }
-        targetEmail = member.email.toLowerCase().trim();
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: targetEmail,
+          password,
+        });
+
+        if (error) return { success: false, error: formatSupabaseError(error) };
+        sessionData = { session: data.session, user: data.user };
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: targetEmail,
-        password,
-      });
+      // 3. MANDATORY STATUS VERIFICATION: Verify member status from DB before granting session access
+      const profRes = await membersApi.getCurrentProfile();
+      if (!profRes.success || !profRes.data) {
+        await supabase.auth.signOut();
+        return {
+          success: false,
+          error: 'মেম্বার প্রোফাইল খুঁজে পাওয়া যায়নি। অনুগ্রহ করে সিস্টেমে যোগাযোগ করুন।',
+        };
+      }
 
-      if (error) return { success: false, error: formatSupabaseError(error) };
-      return { success: true, data: { session: data.session, user: data.user } };
+      if (profRes.data.status !== 'ACTIVE') {
+        await supabase.auth.signOut();
+        return {
+          success: false,
+          error: `আপনার অ্যাকাউন্টটির বর্তমান স্ট্যাটাস: ${profRes.data.status}। অ্যাডমিন অনুমোদন না করা পর্যন্ত প্রবেশ সম্পূর্ণ নিষিদ্ধ।`,
+        };
+      }
+
+      return { success: true, data: sessionData };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }
