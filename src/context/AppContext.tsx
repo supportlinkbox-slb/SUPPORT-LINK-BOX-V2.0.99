@@ -487,6 +487,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (pendingReviewsRes.success && pendingReviewsRes.data) setPendingReviews(pendingReviewsRes.data);
       if (reportsRes.success && reportsRes.data?.reports) setReports(reportsRes.data.reports);
 
+      const mediaRes = await supabase.from('media_items').select('*').order('created_at', { ascending: false });
+      if (mediaRes.data) {
+        setMovies(mediaRes.data.map((m) => ({
+          id: m.id,
+          title: m.title,
+          release_year: String(m.release_year),
+          category: m.category as any,
+          poster_url: m.thumbnail_url,
+          description: m.description || '',
+          status: m.is_published ? 'Published' : 'Draft',
+          pixeldrain_url: m.storage_link,
+          resolutions: {},
+          created_at: m.created_at,
+          created_by: m.created_by,
+        })));
+      }
+
       const profRes = await membersApi.getCurrentProfile();
       if (profRes.success && profRes.data) {
         if (profRes.data.status === 'ACTIVE') {
@@ -610,14 +627,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'members' },
-        () => {
-          membersApi.getAllMembers().then((res) => {
-            if (res.success && res.data) setMembers(res.data);
+        { event: 'UPDATE', schema: 'public', table: 'members' },
+        (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
+          setMembers((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+          );
+          setCurrentUser((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'members' },
+        (payload) => {
+          const newMember = payload.new as any;
+          if (!newMember?.id) return;
+          setMembers((prev) => {
+            if (prev.some((m) => m.id === newMember.id)) return prev;
+            return [...prev, newMember];
           });
-          membersApi.getCurrentProfile().then((res) => {
-            if (res.success && res.data) setCurrentUser(res.data);
-          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'members' },
+        (payload) => {
+          const oldId = (payload.old as { id?: string })?.id;
+          if (!oldId) return;
+          setMembers((prev) => prev.filter((m) => m.id !== oldId));
         }
       )
       .on(
@@ -2079,6 +2119,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, error: 'এডমিন অনুমতি প্রয়োজন।' };
     }
 
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase.rpc('confirm_fake_all_done_secure', {
+        p_all_done_id: allDoneRecordId,
+        p_admin_id: currentUser.id,
+        p_admin_notes: reason,
+      });
+
+      if (error || !data?.success) {
+        console.error('Failed to revoke fake all done via RPC:', error || data);
+        return { success: false, error: error?.message || data?.message || 'ফেক অল ডান রিভোক করতে ব্যর্থ হয়েছে।' };
+      }
+
+      await refreshData();
+      return { success: true };
+    }
+
     const targetRecord = allDoneRecords.find((r) => r.id === allDoneRecordId);
     if (!targetRecord) return { success: false, error: 'All done record not found' };
 
@@ -2348,32 +2404,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
-  // Movie Lover System - 3-Layer Security Implementations
+  // Movie Lover System - Supabase Persistent Database Operations
   const addMovie = async (
     movieData: Omit<MovieItem, 'id' | 'created_at'>
   ): Promise<{ success: boolean; error?: string; movie?: MovieItem }> => {
-    // Layer 1: Authentication Check
     if (!currentUser) return { success: false, error: 'লগইন আবশ্যক।' };
     if (currentUser.status !== 'ACTIVE') return { success: false, error: 'আপনার অ্যাকাউন্ট সচল নয়।' };
-
-    // Layer 2: Role Authorization Check
     if (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER') {
       return { success: false, error: 'সিকিউরিটি অ্যালার্ট: মুভি আপলোড করার অনুমতি কেবল এডমিনের রয়েছে।' };
     }
 
-    // Layer 3: Data & Storage Enforcement
-    const newMovie: MovieItem = {
-      ...movieData,
-      id: `movie-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      created_by: currentUser.id,
-    };
+    try {
+      const { data, error } = await supabase
+        .from('media_items')
+        .insert({
+          community_id: currentUser.community_id || 'main',
+          title: movieData.title,
+          release_year: parseInt(movieData.release_year || '2024', 10) || 2024,
+          category: movieData.category,
+          description: movieData.description,
+          thumbnail_url: movieData.poster_url || (movieData as any).thumbnail_url,
+          storage_link: movieData.pixeldrain_url || movieData.gdflex_url || movieData.resolutions?.res_1080p || '#',
+          is_published: movieData.status === 'Published',
+          created_by: currentUser.id,
+        })
+        .select()
+        .single();
 
-    setMovies((prev) => [newMovie, ...prev]);
-    localStorage.setItem('slb_movies', JSON.stringify([newMovie, ...movies]));
+      if (error) throw error;
 
-    addAuditLog('MOVIE_UPLOADED', 'MOVIE', newMovie.id, `Uploaded movie: ${newMovie.title} (${newMovie.release_year})`);
-    return { success: true, movie: newMovie };
+      const formattedMovie: MovieItem = {
+        id: data.id,
+        title: data.title,
+        release_year: String(data.release_year),
+        category: data.category as any,
+        poster_url: data.thumbnail_url,
+        description: data.description || '',
+        status: data.is_published ? 'Published' : 'Draft',
+        pixeldrain_url: data.storage_link,
+        resolutions: {},
+        created_at: data.created_at,
+        created_by: data.created_by,
+      };
+
+      setMovies((prev) => [formattedMovie, ...prev]);
+      addAuditLog('MOVIE_UPLOADED', 'MOVIE', data.id, `Uploaded movie: ${data.title}`);
+      return { success: true, movie: formattedMovie };
+    } catch (err: any) {
+      console.error('Failed to add movie to media_items:', err);
+      return { success: false, error: err.message || 'মুভি সংরক্ষণ করা সম্ভব হয়নি।' };
+    }
   };
 
   const updateMovie = async (
@@ -2384,14 +2464,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, error: 'সিকিউরিটি অ্যালার্ট: মুভি সম্পাদনার অনুমতি নেই।' };
     }
 
-    setMovies((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
-    );
-    const updated = movies.map((m) => (m.id === id ? { ...m, ...updates } : m));
-    localStorage.setItem('slb_movies', JSON.stringify(updated));
+    try {
+      const dbUpdates: any = {};
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.category !== undefined) dbUpdates.category = updates.category;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.poster_url !== undefined) dbUpdates.thumbnail_url = updates.poster_url;
+      if (updates.status !== undefined) dbUpdates.is_published = updates.status === 'Published';
+      if (updates.pixeldrain_url !== undefined) dbUpdates.storage_link = updates.pixeldrain_url;
 
-    addAuditLog('MOVIE_UPDATED', 'MOVIE', id, `Updated movie parameters for ID: ${id}`);
-    return { success: true };
+      const { error } = await supabase
+        .from('media_items')
+        .update(dbUpdates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setMovies((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
+      );
+
+      addAuditLog('MOVIE_UPDATED', 'MOVIE', id, `Updated movie parameters for ID: ${id}`);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Failed to update movie:', err);
+      return { success: false, error: err.message || 'আপডেট করতে ব্যর্থ হয়েছে।' };
+    }
   };
 
   const deleteMovie = async (
@@ -2401,12 +2499,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, error: 'সিকিউরিটি অ্যালার্ট: মুভি ডিলিট করার অনুমতি নেই।' };
     }
 
-    setMovies((prev) => prev.filter((m) => m.id !== id));
-    const filtered = movies.filter((m) => m.id !== id);
-    localStorage.setItem('slb_movies', JSON.stringify(filtered));
+    try {
+      const { error } = await supabase.from('media_items').delete().eq('id', id);
+      if (error) throw error;
 
-    addAuditLog('MOVIE_DELETED', 'MOVIE', id, `Deleted/Archived movie ID: ${id}`);
-    return { success: true };
+      setMovies((prev) => prev.filter((m) => m.id !== id));
+      addAuditLog('MOVIE_DELETED', 'MOVIE', id, `Deleted/Archived movie ID: ${id}`);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Failed to delete movie:', err);
+      return { success: false, error: err.message || 'ডিলিট করতে ব্যর্থ হয়েছে।' };
+    }
   };
 
   const submitMovieRequest = async (requestData: {

@@ -39,6 +39,17 @@ export const LeaderboardView: React.FC = () => {
     }
   }, [activeMembers, period, searchQuery]);
 
+  // SLB-BUG-07 FIX: Strictly filter podium candidates (must be ACTIVE and have >= 17 weekly points if WEEKLY)
+  const podiumList = useMemo(() => {
+    return displayList.filter((m) => {
+      if (m.status !== 'ACTIVE') return false;
+      if (period === 'WEEKLY' || period === 'HISTORICAL') {
+        return (m.weekly_points ?? 0) >= 17;
+      }
+      return true;
+    });
+  }, [displayList, period]);
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       {/* Top Header */}
@@ -153,71 +164,71 @@ export const LeaderboardView: React.FC = () => {
       {/* Top 3 Podium Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* 2nd Place */}
-        {displayList[1] && (
+        {podiumList[1] && (
           <div className="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-5 text-center flex flex-col items-center justify-between order-2 md:order-1 shadow-lg">
             <div className="w-8 h-8 rounded-full bg-slate-300 text-slate-950 font-black text-sm flex items-center justify-center mb-2">
               2
             </div>
             <img
-              src={displayList[1].profile_photo_url}
-              alt={displayList[1].name}
+              src={podiumList[1].profile_photo_url}
+              alt={podiumList[1].name}
               className="w-16 h-16 rounded-full object-cover border-2 border-slate-300 mb-2 shadow-md"
             />
-            <div className="font-bold text-sm text-white">{displayList[1].name}</div>
-            <div className="text-[11px] text-slate-400 font-mono">{displayList[1].member_number}</div>
+            <div className="font-bold text-sm text-white">{podiumList[1].name}</div>
+            <div className="text-[11px] text-slate-400 font-mono">{podiumList[1].member_number}</div>
             <div className="mt-3 text-base font-black font-mono text-slate-200 bg-slate-800/80 px-4 py-1 rounded-xl border border-slate-700">
               {period === 'DAILY'
-                ? `${displayList[1].daily_points ?? 0} pts`
+                ? `${podiumList[1].daily_points ?? 0} pts`
                 : period === 'WEEKLY' || period === 'HISTORICAL'
-                ? `${displayList[1].weekly_points} pts`
-                : `${displayList[1].points} pts`}
+                ? `${podiumList[1].weekly_points} pts`
+                : `${podiumList[1].points} pts`}
             </div>
           </div>
         )}
 
         {/* 1st Place Champion */}
-        {displayList[0] && (
+        {podiumList[0] && (
           <div className="bg-gradient-to-b from-amber-950/40 to-slate-900 border-2 border-amber-500/60 rounded-3xl p-6 text-center flex flex-col items-center justify-between order-1 md:order-2 shadow-2xl relative">
             <Crown className="w-8 h-8 text-amber-400 -mt-2 animate-bounce" />
             <div className="w-9 h-9 rounded-full bg-amber-500 text-slate-950 font-black text-base flex items-center justify-center mb-2 shadow-lg">
               1
             </div>
             <img
-              src={displayList[0].profile_photo_url}
-              alt={displayList[0].name}
+              src={podiumList[0].profile_photo_url}
+              alt={podiumList[0].name}
               className="w-20 h-20 rounded-full object-cover border-4 border-amber-400 mb-2 shadow-xl"
             />
-            <div className="font-black text-base text-white">{displayList[0].name}</div>
-            <div className="text-xs text-amber-400 font-mono">{displayList[0].member_number}</div>
+            <div className="font-black text-base text-white">{podiumList[0].name}</div>
+            <div className="text-xs text-amber-400 font-mono">{podiumList[0].member_number}</div>
             <div className="mt-3 text-lg font-black font-mono text-amber-300 bg-amber-950/80 px-5 py-1.5 rounded-2xl border border-amber-500/50 shadow-inner">
               {period === 'DAILY'
-                ? `${displayList[0].daily_points ?? 0} pts`
+                ? `${podiumList[0].daily_points ?? 0} pts`
                 : period === 'WEEKLY' || period === 'HISTORICAL'
-                ? `${displayList[0].weekly_points} pts`
-                : `${displayList[0].points} pts`}
+                ? `${podiumList[0].weekly_points} pts`
+                : `${podiumList[0].points} pts`}
             </div>
           </div>
         )}
 
         {/* 3rd Place */}
-        {displayList[2] && (
+        {podiumList[2] && (
           <div className="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-5 text-center flex flex-col items-center justify-between order-3 shadow-lg">
             <div className="w-8 h-8 rounded-full bg-amber-700 text-white font-black text-sm flex items-center justify-center mb-2">
               3
             </div>
             <img
-              src={displayList[2].profile_photo_url}
-              alt={displayList[2].name}
+              src={podiumList[2].profile_photo_url}
+              alt={podiumList[2].name}
               className="w-16 h-16 rounded-full object-cover border-2 border-amber-700 mb-2 shadow-md"
             />
-            <div className="font-bold text-sm text-white">{displayList[2].name}</div>
-            <div className="text-[11px] text-slate-400 font-mono">{displayList[2].member_number}</div>
+            <div className="font-bold text-sm text-white">{podiumList[2].name}</div>
+            <div className="text-[11px] text-slate-400 font-mono">{podiumList[2].member_number}</div>
             <div className="mt-3 text-base font-black font-mono text-amber-500 bg-slate-800/80 px-4 py-1 rounded-xl border border-slate-700">
               {period === 'DAILY'
-                ? `${displayList[2].daily_points ?? 0} pts`
+                ? `${podiumList[2].daily_points ?? 0} pts`
                 : period === 'WEEKLY' || period === 'HISTORICAL'
-                ? `${displayList[2].weekly_points} pts`
-                : `${displayList[2].points} pts`}
+                ? `${podiumList[2].weekly_points} pts`
+                : `${podiumList[2].points} pts`}
             </div>
           </div>
         )}

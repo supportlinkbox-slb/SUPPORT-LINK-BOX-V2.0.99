@@ -35,6 +35,14 @@ serve(async (req) => {
       
     if (recErr) throw recErr;
 
+    // 3.5 SLB-BUG-10 FIX: Calculate Cryptographic SHA-256 Checksum
+    const jsonString = JSON.stringify(records || []);
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(jsonString);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const checksum = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
     // 4. Authenticate Google
     const token = await createGoogleAccessToken();
 
@@ -46,12 +54,18 @@ serve(async (req) => {
       records
     );
 
-    // 6. Verify and update status
+    // 6. Verify and update status with checksum
     if (rowCount !== records.length) throw new Error("Row count mismatch");
 
-    await supabase.from("archive_batches").update({ status: "VERIFIED", row_count: rowCount }).eq("id", batch_id);
+    await supabase
+      .from("archive_batches")
+      .update({ status: "VERIFIED", row_count: rowCount, checksum: checksum })
+      .eq("id", batch_id);
 
-    return new Response(JSON.stringify({ success: true, exported: rowCount }), { status: 200 });
+    return new Response(
+      JSON.stringify({ success: true, exported: rowCount, checksum }), 
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
 
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500 });

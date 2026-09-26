@@ -253,8 +253,31 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     if (mode === 'REGISTER') {
-      let finalPhotoUrl = (profilePhotoUrl || '').trim();
+      let initialPhotoUrl = (profilePhotoUrl || '').trim();
       
+      const fbValidation = validateAndExtractFacebookProfile((facebookUrl || '').trim());
+      
+      // Step 2: Sign Up First to establish authentication context
+      const res = await register({
+        email: trimmedEmail,
+        pass: password,
+        name: (name || '').trim(),
+        facebookUrl: (facebookUrl || '').trim(),
+        profilePhotoUrl: initialPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        facebookIdentityKey: fbValidation?.identityKey,
+        facebookIdentityType: fbValidation?.identityType,
+        tokenHash: inviteTokenHash || undefined,
+      });
+
+      if (!res.success) {
+        setErrorMsg(res.error || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।');
+        setPassword('');
+        setConfirmPassword('');
+        setLoading(false);
+        return;
+      }
+
+      // Step 3: Upload Avatar Photo using the established account session if file provided
       if (photoInputMode === 'UPLOAD' && profilePhotoFile) {
         try {
           const compressedFile = await compressImage(profilePhotoFile);
@@ -262,57 +285,47 @@ export const LoginPage: React.FC = () => {
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
           const filePath = `${fileName}`;
 
-          const { data: uploadData, error: uploadError } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(filePath, compressedFile);
+            .upload(filePath, compressedFile, { upsert: true });
 
-          if (uploadError) throw uploadError;
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('avatars')
+              .getPublicUrl(filePath);
 
-          const { data: { publicUrl } } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(filePath);
-          
-          finalPhotoUrl = publicUrl;
-        } catch (error) {
-          setErrorMsg('ছবি আপলোড করতে সমস্যা হয়েছে: ' + (error.message || error) + '. Storage তৈরি আছে কিনা নিশ্চিত করুন অথবা ছবির লিংক ব্যবহার করুন।');
-          setLoading(false);
-          return;
+            // Update photo_url in members table for newly created user
+            if (publicUrl) {
+              const { data: userData } = await supabase.auth.getUser();
+              if (userData?.user) {
+                await supabase
+                  .from('members')
+                  .update({ photo_url: publicUrl, status: 'PENDING' })
+                  .eq('auth_user_id', userData.user.id);
+              }
+            }
+          }
+        } catch (uploadErr) {
+          console.warn('Avatar upload warning:', uploadErr);
         }
       }
 
-      const fbValidation = validateAndExtractFacebookProfile((facebookUrl || '').trim());
-      const res = await register({
-        email: trimmedEmail,
-        pass: password,
-        name: (name || '').trim(),
-        facebookUrl: (facebookUrl || '').trim(),
-        profilePhotoUrl: finalPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        facebookIdentityKey: fbValidation?.identityKey,
-        facebookIdentityType: fbValidation?.identityType,
-        tokenHash: inviteTokenHash || undefined,
-      });
       setPassword('');
       setConfirmPassword('');
       setLoading(false);
 
-      if (res.success) {
-        if (res.needsEmailConfirmation) {
-          setSuccessNotice({
-            type: 'EMAIL_CONFIRMATION',
-            message:
-              res.message ||
-              'আপনার Email-এ Confirmation link পাঠানো হয়েছে। অনুগ্রহ করে Email চেক করে অ্যাকাউন্ট নিশ্চিত করুন।',
-          });
-        } else {
-          setSuccessNotice({
-            type: 'REGISTER_SUCCESS',
-            message:
-              res.message ||
-              'আপনার Registration সফলভাবে সম্পন্ন হয়েছে। বর্তমানে আপনার Account Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
-          });
-        }
+      if (res.needsEmailConfirmation) {
+        setSuccessNotice({
+          type: 'EMAIL_CONFIRMATION',
+          message:
+            res.message ||
+            'আপনার Email-এ Confirmation link পাঠানো হয়েছে। অনুগ্রহ করে Email চেক করে অ্যাকাউন্ট নিশ্চিত করুন।',
+        });
       } else {
-        setErrorMsg(res.error || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।');
+        setSuccessNotice({
+          type: 'REGISTER_SUCCESS',
+          message: 'রেজিস্ট্রেশন সফল হয়েছে! অ্যাডমিন অ্যাপ্রুভালের জন্য অপেক্ষা করুন।',
+        });
       }
     }
   };
