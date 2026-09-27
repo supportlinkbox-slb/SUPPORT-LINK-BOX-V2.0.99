@@ -311,6 +311,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   const [supportedLinkIds, setSupportedLinkIds] = useState<Set<string>>(() => {
+    if (isSupabaseConfigured) return new Set();
     const saved = localStorage.getItem(`slb_supported_${todayDate}_${currentUser?.id || 'guest'}`);
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
@@ -327,6 +328,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   const [reports, setReports] = useState<LinkReport[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('slb_reports');
     return saved ? JSON.parse(saved) : [];
   });
@@ -357,11 +359,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [notifications, currentUser]);
 
   const [punishments, setPunishments] = useState<PunishmentRecord[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('slb_punishments');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('slb_audit_logs');
     return saved ? JSON.parse(saved) : [];
   });
@@ -512,6 +516,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [members]);
 
   useEffect(() => {
+    if (isSupabaseConfigured) return;
     if (currentUser) {
       const saved = localStorage.getItem(`slb_supported_${todayDate}_${currentUser.id}`);
       setSupportedLinkIds(saved ? new Set(JSON.parse(saved)) : new Set());

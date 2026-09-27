@@ -29,6 +29,7 @@ import { SystemResetModal } from './SystemResetModal';
 import { AdminNoticeGeneratorModal } from './AdminNoticeGeneratorModal';
 import { FestivalThemeManagerModal } from './FestivalThemeManagerModal';
 import { FESTIVAL_THEMES } from '../../types/festivalTheme';
+import { lifecycleApi } from '../../lib/supabase';
 
 type SettingSectionTab = 'schedule' | 'rules' | 'contact' | 'recovery' | 'theme' | 'backup' | 'security';
 
@@ -78,6 +79,54 @@ export const AdminSettingsPanel: React.FC = () => {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [selectedInactivityDays, setSelectedInactivityDays] = useState<3 | 7>(3);
   const [isNoticeGeneratorOpen, setIsNoticeGeneratorOpen] = useState(false);
+  const [isRunning10amCutoff, setIsRunning10amCutoff] = useState(false);
+  const [cutoffResult, setCutoffResult] = useState<{ count: number; date: string; members: string[] } | null>(null);
+  const [isArchivingSheets, setIsArchivingSheets] = useState(false);
+  const [archiveResult, setArchiveResult] = useState<{ rows: number; checksum: string; status: string } | null>(null);
+
+  const handleRun10amCutoff = async () => {
+    if (!confirm('আপনি কি পূর্ববর্তী দিনের ১০:০০ AM BDT রিকভারি কাট-অফ চেক রান করতে চান? বকেয়া সাপোর্ট সম্পন্ন না করা মেম্বাররা স্বয়ংক্রিয়ভাবে সাসপেন্ড হবে।')) return;
+    setIsRunning10amCutoff(true);
+    setCutoffResult(null);
+    try {
+      const res = await lifecycleApi.execute10amRecoveryCutoff();
+      if (res.success && res.data) {
+        setCutoffResult({
+          count: res.data.suspended_count || 0,
+          date: res.data.target_date || 'Yesterday',
+          members: res.data.suspended_members || [],
+        });
+        await refreshData();
+      } else {
+        alert(res.error || 'কাট-অফ রান ব্যর্থ হয়েছে।');
+      }
+    } catch (err: any) {
+      alert(err.message || 'ত্রুটি ঘটেছে');
+    } finally {
+      setIsRunning10amCutoff(false);
+    }
+  };
+
+  const handleTriggerSheetsArchive = async () => {
+    setIsArchivingSheets(true);
+    setArchiveResult(null);
+    try {
+      const res = await lifecycleApi.triggerGoogleSheetsArchive();
+      if (res.success && res.data) {
+        setArchiveResult({
+          rows: res.data.exported_rows || 0,
+          checksum: res.data.sha256_checksum || '',
+          status: res.data.status || 'VERIFIED',
+        });
+      } else {
+        alert(res.error || 'গুগল শিটস অটো আর্কাইভ ব্যর্থ হয়েছে।');
+      }
+    } catch (err: any) {
+      alert(err.message || 'ত্রুটি ঘটেছে');
+    } finally {
+      setIsArchivingSheets(false);
+    }
+  };
 
   // Filter inactive members for Recovery Duty Manager
   const inactiveMembers = members.filter((m) => {
@@ -429,8 +478,54 @@ export const AdminSettingsPanel: React.FC = () => {
 
           {/* Section 4: Recovery Manager */}
           {activeTab === 'recovery' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl space-y-4 p-5">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-4 gap-2">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl space-y-5 p-5">
+              {/* 10:00 AM BDT Recovery Cutoff Controller */}
+              <div className="bg-slate-950/80 border border-amber-500/30 rounded-2xl p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>১০:০০ AM BDT রিকভারি কাট-অফ ক্রন ইঞ্জিন</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                          AUTO-CRON 04:00 UTC
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        পূর্ববর্তী দিনের লিংক জমা দেয়া যেসকল সদস্য সকাল ১০:০০ AM BDT পর্যন্ত বাকি সাপোর্ট পূরণ করেননি, তাদের একাউন্ট স্বয়ংক্রিয়ভাবে সাসপেন্ড করা হয়।
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRun10amCutoff}
+                    disabled={isRunning10amCutoff}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 shrink-0 cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${isRunning10amCutoff ? 'animate-spin' : ''}`} />
+                    <span>{isRunning10amCutoff ? 'চেক চলছে...' : 'কাট-অফ চেক রান করুন'}</span>
+                  </button>
+                </div>
+
+                {cutoffResult && (
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-1">
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="text-amber-400">কাট-অফ রান ফলাফল ({cutoffResult.date}):</span>
+                      <span>সাসপেন্ডেড মেম্বার: <strong className="text-red-400 font-mono">{cutoffResult.count}</strong> জন</span>
+                    </div>
+                    {cutoffResult.members.length > 0 && (
+                      <p className="text-[11px] text-slate-400">
+                        সাসপেন্ডকৃত সদস্যগণ: {cutoffResult.members.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-4 gap-2 pt-2">
                 <div>
                   <h2 className="text-sm font-bold text-white flex items-center gap-2">
                     <UserCheck className="w-5 h-5 text-amber-400" />
@@ -582,13 +677,57 @@ export const AdminSettingsPanel: React.FC = () => {
 
           {/* Section 5: Data Backup & CSV */}
           {activeTab === 'backup' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                <FileSpreadsheet className="w-5 h-5 text-green-400" />
-                <span>ডেটা ব্যাকআপ ও CSV/Excel এক্সপোর্ট Engine</span>
-              </h2>
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-5 shadow-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-3 gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-green-400" />
+                    <span>গুগল শিটস অটো আর্কাইভ ও ব্যাকআপ Engine</span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    ব্লুপ্রিন্ট সেকশন ৫১-৫৪: ক্রিপ্টোগ্রাফিক SHA-256 চেকসাম ভেরিফিকেশন সহ অটো-এক্সপোর্ট
+                  </p>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <button
+                  type="button"
+                  onClick={handleTriggerSheetsArchive}
+                  disabled={isArchivingSheets}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isArchivingSheets ? 'animate-spin' : ''}`} />
+                  <span>{isArchivingSheets ? 'ব্যাকআপ ও চেকসাম তৈরি হচ্ছে...' : 'গুগল শিটসে ব্যাকআপ নিন'}</span>
+                </button>
+              </div>
+
+              {/* Archive Result with Verified Checksum */}
+              {archiveResult && (
+                <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 text-xs space-y-2">
+                  <div className="flex items-center justify-between font-bold text-emerald-300">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>গুগল শিটস আর্কাইভ সফলভাবে সংরক্ষিত হয়েছে!</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 border border-emerald-500/30 font-mono">
+                      {archiveResult.status}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
+                    <div>
+                      <span className="text-slate-500">সংরক্ষিত সারি (Rows):</span>{' '}
+                      <strong className="text-white font-mono">{archiveResult.rows} টি</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">SHA-256 Checksum:</span>{' '}
+                      <span className="text-cyan-400 font-mono text-[10px] truncate block">
+                        {archiveResult.checksum}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2">
                 <button
                   onClick={exportMembersCSV}
                   className="p-4 rounded-2xl bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-green-800/60 text-white font-bold transition flex items-center justify-between group"

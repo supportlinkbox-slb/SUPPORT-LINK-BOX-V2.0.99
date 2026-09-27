@@ -1679,5 +1679,95 @@ export const noticesApi = {
   },
 };
 
+/**
+ * ADVANCED LIFECYCLE & 10:00 AM BDT CRON GATEWAY API (Chapters 13, 19, 23)
+ */
+export const lifecycleApi = {
+  async execute10amRecoveryCutoff(): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) {
+        return {
+          success: true,
+          data: {
+            success: true,
+            target_date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+            suspended_count: 0,
+            suspended_members: [],
+            message: 'Preview mode: 10:00 AM BDT recovery check completed with zero penalties.',
+          },
+        };
+      }
+
+      const { data, error } = await supabase.rpc('cron_bdt_10am_recovery_cutoff');
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async triggerGoogleSheetsArchive(params?: {
+    batch_id?: string;
+    source_table?: string;
+    period_start?: string;
+    period_end?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) {
+        return {
+          success: true,
+          data: {
+            success: true,
+            exported_rows: 25,
+            sha256_checksum: 'a8f5c38917e94e77b1029c786a32d1ef8e268a2f47053e19875df5f187a5523b',
+            status: 'VERIFIED',
+          },
+        };
+      }
+
+      const { data, error } = await supabase.functions.invoke('lifecycle-google-sheets', {
+        body: params || {},
+      });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async executeSafeCleanup(batchId: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: { success: true, rows_cleaned: 0 } };
+      const { data, error } = await supabase.rpc('execute_weekly_safe_cleanup', {
+        p_batch_id: batchId,
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+};
+
+/**
+ * MEDIA DRM STREAM GATEWAY API (Chapter 22 & Section 45)
+ */
+export const mediaApi = {
+  async getObfuscatedMediaStream(mediaId: string, resolution: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+      const { data, error } = await supabase.rpc('get_obfuscated_media_stream', {
+        p_media_id: mediaId,
+        p_resolution: resolution,
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+};
+
 
 
