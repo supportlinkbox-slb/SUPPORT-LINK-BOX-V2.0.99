@@ -42,7 +42,13 @@ CREATE POLICY "Public communities read" ON public.communities FOR SELECT USING (
 
 -- Members
 DROP POLICY IF EXISTS "Authenticated members read" ON public.members;
-CREATE POLICY "Authenticated members read" ON public.members FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated members read" ON public.members FOR SELECT TO authenticated
+USING (
+    auth_user_id = auth.uid() OR
+    EXISTS (
+        SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+    ) OR public.is_current_user_admin_or_dev()
+);
 
 DROP POLICY IF EXISTS "Members update self or admin" ON public.members;
 CREATE POLICY "Members update self or admin" ON public.members FOR UPDATE TO authenticated
@@ -50,14 +56,19 @@ USING (auth_user_id = auth.uid() OR public.is_current_user_admin_or_dev());
 
 -- Daily Links
 DROP POLICY IF EXISTS "Authenticated view daily links" ON public.daily_links;
-CREATE POLICY "Authenticated view daily links" ON public.daily_links FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated view daily links" ON public.daily_links FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+    ) OR public.is_current_user_admin_or_dev()
+);
 
 DROP POLICY IF EXISTS "Members insert own daily link" ON public.daily_links;
 CREATE POLICY "Members insert own daily link" ON public.daily_links FOR INSERT TO authenticated
 WITH CHECK (
     EXISTS (
         SELECT 1 FROM public.members
-        WHERE id = daily_links.member_id AND auth_user_id = auth.uid()
+        WHERE id = daily_links.member_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
     )
 );
 
@@ -66,33 +77,43 @@ CREATE POLICY "Members update own link or admin" ON public.daily_links FOR UPDAT
 USING (
     EXISTS (
         SELECT 1 FROM public.members
-        WHERE id = daily_links.member_id AND auth_user_id = auth.uid()
+        WHERE id = daily_links.member_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
     ) OR public.is_current_user_admin_or_dev()
 );
 
 -- Support Records
 DROP POLICY IF EXISTS "Authenticated view support records" ON public.support_records;
-CREATE POLICY "Authenticated view support records" ON public.support_records FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated view support records" ON public.support_records FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+    ) OR public.is_current_user_admin_or_dev()
+);
 
 DROP POLICY IF EXISTS "Supporters insert own support record" ON public.support_records;
 CREATE POLICY "Supporters insert own support record" ON public.support_records FOR INSERT TO authenticated
 WITH CHECK (
     EXISTS (
         SELECT 1 FROM public.members
-        WHERE id = support_records.supporter_id AND auth_user_id = auth.uid()
+        WHERE id = support_records.supporter_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
     )
 );
 
 -- All Done Records
 DROP POLICY IF EXISTS "Authenticated view all done" ON public.all_done;
-CREATE POLICY "Authenticated view all done" ON public.all_done FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated view all done" ON public.all_done FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+    ) OR public.is_current_user_admin_or_dev()
+);
 
 DROP POLICY IF EXISTS "Members insert own all done" ON public.all_done;
 CREATE POLICY "Members insert own all done" ON public.all_done FOR INSERT TO authenticated
 WITH CHECK (
     EXISTS (
         SELECT 1 FROM public.members
-        WHERE id = all_done.member_id AND auth_user_id = auth.uid()
+        WHERE id = all_done.member_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
     )
 );
 

@@ -191,7 +191,22 @@ export const authApi = {
 
       // CRITICAL SECURITY ENFORCEMENT: Always sign out immediately after registration.
       // Registration MUST NOT result in an active authenticated session.
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutErr) {
+        console.warn('SignOut post-registration exception:', signOutErr);
+      }
+
+      if (typeof window !== 'undefined') {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('supabase') || key.includes('sb-') || key.includes('auth'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      }
 
       const needsEmailConfirmation = !data.session && Boolean(data.user);
 
@@ -399,32 +414,12 @@ export const membersApi = {
         try { await supabase.rpc('ensure_my_member_profile'); } catch {}
       }
 
-      // Fetch the profile strictly by auth_user_id, with fallback to email matching
-      let { data: profile, error: dbErr } = await supabase
+      // Fetch the profile strictly by auth_user_id mapped to authenticated user session
+      const { data: profile } = await supabase
         .from('members')
         .select('*')
         .eq('auth_user_id', user.id)
         .maybeSingle();
-
-      if (!profile && userEmail) {
-        const { data: emailProfile } = await supabase
-          .from('members')
-          .select('*')
-          .ilike('email', userEmail)
-          .maybeSingle();
-
-        if (emailProfile) {
-          try {
-            await supabase
-              .from('members')
-              .update({ auth_user_id: user.id })
-              .eq('id', emailProfile.id);
-          } catch (e) {
-            console.error('Auto-link failed:', e);
-          }
-          profile = { ...emailProfile, auth_user_id: user.id };
-        }
-      }
 
       if (profile) {
         return { success: true, data: profile as MemberProfile };

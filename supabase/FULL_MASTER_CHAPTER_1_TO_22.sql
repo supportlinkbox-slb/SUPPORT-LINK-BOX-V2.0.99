@@ -543,6 +543,118 @@ BEGIN
 END;
 $$;
 
+-- Protect Member Auth User ID from unauthorized takeover
+CREATE OR REPLACE FUNCTION public.protect_member_auth_user_id()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    IF OLD.auth_user_id IS NOT NULL AND NEW.auth_user_id IS DISTINCT FROM OLD.auth_user_id THEN
+        IF NOT public.is_current_user_admin_or_dev() THEN
+            RAISE EXCEPTION 'SECURITY_VIOLATION: Modifying member auth_user_id is strictly forbidden.';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_protect_member_auth_user_id ON public.members;
+CREATE TRIGGER trg_protect_member_auth_user_id
+    BEFORE UPDATE OF auth_user_id ON public.members
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_member_auth_user_id();
+
+-- Authoritative Profile Resolution RPC
+CREATE OR REPLACE FUNCTION public.rpc_get_current_member_profile()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+    v_uid UUID := auth.uid();
+    v_member public.members%ROWTYPE;
+BEGIN
+    IF v_uid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'UNAUTHENTICATED');
+    END IF;
+
+    SELECT * INTO v_member FROM public.members WHERE auth_user_id = v_uid;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'MEMBER_NOT_FOUND');
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'profile', to_jsonb(v_member)
+    );
+END;
+$$;
+
+-- Hardened Orphan Profile Binding (Anti-Hijack & Anti-Privilege-Escalation)
+CREATE OR REPLACE FUNCTION public.ensure_my_member_profile()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+    v_auth_uid UUID := auth.uid();
+    v_auth_email TEXT;
+    v_email_confirmed TIMESTAMPTZ;
+    v_member_id UUID;
+    v_member_auth_uid UUID;
+    v_member_role public.user_role;
+BEGIN
+    IF v_auth_uid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'UNAUTHENTICATED');
+    END IF;
+
+    SELECT id INTO v_member_id FROM public.members WHERE auth_user_id = v_auth_uid LIMIT 1;
+    IF v_member_id IS NOT NULL THEN
+        RETURN jsonb_build_object('success', true, 'message', 'Profile already bound');
+    END IF;
+
+    SELECT email, email_confirmed_at INTO v_auth_email, v_email_confirmed
+    FROM auth.users WHERE id = v_auth_uid;
+
+    IF v_auth_email IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'NO_EMAIL_IN_AUTH');
+    END IF;
+
+    IF v_email_confirmed IS NULL AND LOWER(v_auth_email) NOT IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'EMAIL_NOT_VERIFIED');
+    END IF;
+
+    SELECT id, auth_user_id, role INTO v_member_id, v_member_auth_uid, v_member_role
+    FROM public.members
+    WHERE LOWER(email) = LOWER(v_auth_email)
+    ORDER BY created_at ASC
+    LIMIT 1;
+
+    IF v_member_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'PROFILE_NOT_FOUND');
+    END IF;
+
+    IF v_member_auth_uid IS NOT NULL AND v_member_auth_uid <> v_auth_uid THEN
+        RETURN jsonb_build_object('success', false, 'error', 'PROFILE_ALREADY_CLAIMED');
+    END IF;
+
+    IF v_member_role IN ('ADMIN', 'DEVELOPER') AND LOWER(v_auth_email) NOT IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'PRIVILEGED_ACCOUNTS_REQUIRE_MANUAL_ADMIN_PROVISIONING');
+    END IF;
+
+    UPDATE public.members
+    SET auth_user_id = v_auth_uid,
+        updated_at = NOW()
+    WHERE id = v_member_id AND (auth_user_id IS NULL OR auth_user_id = v_auth_uid);
+
+    RETURN jsonb_build_object('success', true, 'message', 'Profile successfully linked server-side');
+END;
+$$;
+
 -- ====================================================================
 -- CHAPTER 02 — AUTOMATIC MEMBER PROVISIONING TRIGGER ON USER SIGNUP
 -- ====================================================================
@@ -593,13 +705,22 @@ BEGIN
         v_username,
         NEW.email,
         v_role,
-        'ACTIVE',
+        CASE WHEN v_role = 'DEVELOPER' THEN 'ACTIVE' ELSE 'PENDING' END,
         v_base_name,
         COALESCE(NEW.raw_user_meta_data->>'facebook_url', ''),
         COALESCE(NEW.raw_user_meta_data->>'community_id', 'main'),
         'Support Link Box Official'
     )
     ON CONFLICT (auth_user_id) DO NOTHING;
+
+    -- HARDENED SECURITY: Set auth.users raw_app_meta_data so the JWT contains status = PENDING (or ACTIVE for devs)
+    UPDATE auth.users
+    SET raw_app_meta_data = jsonb_set(
+        COALESCE(raw_app_meta_data, '{}'::jsonb),
+        '{status}',
+        to_jsonb(CASE WHEN v_role = 'DEVELOPER' THEN 'ACTIVE' ELSE 'PENDING' END)
+    )
+    WHERE id = NEW.id;
 
     RETURN NEW;
 END;
@@ -609,6 +730,33 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Trigger to synchronize members.status change to auth.users.raw_app_meta_data for immediate JWT invalidation/update
+CREATE OR REPLACE FUNCTION public.sync_member_status_to_auth_app_metadata()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+BEGIN
+    IF NEW.auth_user_id IS NOT NULL AND (OLD.status IS DISTINCT FROM NEW.status) THEN
+        UPDATE auth.users
+        SET raw_app_meta_data = jsonb_set(
+            COALESCE(raw_app_meta_data, '{}'::jsonb),
+            '{status}',
+            to_jsonb(NEW.status::text)
+        )
+        WHERE id = NEW.auth_user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_sync_member_status_to_auth ON public.members;
+CREATE TRIGGER trg_sync_member_status_to_auth
+    AFTER UPDATE OF status ON public.members
+    FOR EACH ROW
+    EXECUTE FUNCTION public.sync_member_status_to_auth_app_metadata();
 
 -- ====================================================================
 -- CHAPTER 07 & 08 — ATOMIC BUSINESS STORED PROCEDURES (RPCS)

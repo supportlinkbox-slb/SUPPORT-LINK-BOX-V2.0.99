@@ -309,12 +309,14 @@ export const LoginPage: React.FC = () => {
       } catch {
         // Ignore signout error
       }
+      const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && (key.includes('supabase') || key.includes('sb-') || key.includes('auth'))) {
-          localStorage.removeItem(key);
+          keysToRemove.push(key);
         }
       }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
       sessionStorage.clear();
 
       setPassword('');

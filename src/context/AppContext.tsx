@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import confetti from 'canvas-confetti';
 import {
   MemberProfile,
@@ -269,6 +269,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Core State
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
+  const isRegisteringRef = useRef<boolean>(false);
   const [members, setMembers] = useState<MemberProfile[]>(() => {
     if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('slb_members');
@@ -547,6 +548,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setAuthLoading(true);
         const session = await authApi.getSession();
         if (session?.user && isMounted) {
+          // 1. Check JWT app_metadata status claim if available
+          const appMetaStatus = session.user.app_metadata?.status;
+          if (appMetaStatus && appMetaStatus !== 'ACTIVE') {
+            await authApi.signOut();
+            setCurrentUser(null);
+            return;
+          }
+
+          // 2. Authoritative profile status verification
           const profRes = await membersApi.getCurrentProfile();
           if (profRes.success && profRes.data && isMounted) {
             if (profRes.data.status === 'ACTIVE') {
@@ -595,7 +605,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         event === 'TOKEN_REFRESHED' ||
         event === 'USER_UPDATED'
       ) {
+        // If registration flow is active, do not allow automatic login session!
+        if (isRegisteringRef.current) {
+          await authApi.signOut();
+          setCurrentUser(null);
+          return;
+        }
+
         if (session?.user) {
+          // Check JWT app_metadata claim
+          const appMetaStatus = session.user.app_metadata?.status;
+          if (appMetaStatus && appMetaStatus !== 'ACTIVE') {
+            await authApi.signOut();
+            setCurrentUser(null);
+            return;
+          }
+
           const profRes = await membersApi.getCurrentProfile();
           if (profRes.success && profRes.data && isMounted) {
             if (profRes.data.status === 'ACTIVE') {
@@ -605,10 +630,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setSupportedLinkIds(new Set(suppRes.data.map((r) => r.link_id)));
               }
             } else {
-              // Strictly reject non-active session logins
+              // Strictly reject non-active session logins (PENDING, SUSPENDED, FROZEN, REMOVED)
               await authApi.signOut();
               setCurrentUser(null);
             }
+          } else if (isMounted) {
+            // Force sign out if profile cannot be retrieved or user is newly registered pending approval
+            await authApi.signOut();
+            setCurrentUser(null);
           }
         }
       }
@@ -883,60 +912,52 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     facebookIdentityType?: 'numeric_id' | 'username';
     tokenHash?: string;
   }) => {
-    if (isSupabaseConfigured) {
-      const res = await authApi.signUp({
-        email: data.email,
-        password: data.pass,
-        name: data.name,
-        facebookUrl: data.facebookUrl,
-        profilePhotoUrl: data.profilePhotoUrl,
-        facebookIdentityKey: data.facebookIdentityKey,
-        facebookIdentityType: data.facebookIdentityType,
-      });
+    isRegisteringRef.current = true;
+    try {
+      if (isSupabaseConfigured) {
+        const res = await authApi.signUp({
+          email: data.email,
+          password: data.pass,
+          name: data.name,
+          facebookUrl: data.facebookUrl,
+          profilePhotoUrl: data.profilePhotoUrl,
+          facebookIdentityKey: data.facebookIdentityKey,
+          facebookIdentityType: data.facebookIdentityType,
+        });
 
-      if (!res.success) {
-        return { success: false, error: res.error };
-      }
-      
-      if (res.data?.session && data.tokenHash) {
-         // User just signed up and has a session. Consume the invite token before signing out.
-         const consumeRes = await supabase.rpc('consume_invite_token_tx', { p_token_hash: data.tokenHash });
-         if (consumeRes.error || !consumeRes.data?.success) {
-            console.error('Invite consume error:', consumeRes.error || consumeRes.data?.reason);
-         }
-      }
+        if (!res.success) {
+          return { success: false, error: res.error };
+        }
+        
+        if (res.data?.session && data.tokenHash) {
+           // User just signed up and has a session. Consume the invite token before signing out.
+           const consumeRes = await supabase.rpc('consume_invite_token_tx', { p_token_hash: data.tokenHash });
+           if (consumeRes.error || !consumeRes.data?.success) {
+              console.error('Invite consume error:', consumeRes.error || consumeRes.data?.reason);
+           }
+        }
 
-
-            // No Auto Login - enforce signout
-      if (res.data?.session) {
+        // Complete zero-login enforcement: Always sign out
         await authApi.signOut();
-      }
+        setCurrentUser(null);
 
-      if (res.data?.needsEmailConfirmation) {
-        return {
-          success: true,
-          needsEmailConfirmation: true,
-          message:
-            'আপনার Email-এ Confirmation link পাঠানো হয়েছে। অনুগ্রহ করে Email চেক করে অ্যাকাউন্ট নিশ্চিত করুন।',
-        };
-      }
+        if (res.data?.needsEmailConfirmation) {
+          return {
+            success: true,
+            needsEmailConfirmation: true,
+            message:
+              'আপনার Email-এ Confirmation link পাঠানো হয়েছে। অনুগ্রহ করে Email চেক করে অ্যাকাউন্ট নিশ্চিত করুন।',
+          };
+        }
 
-      // Enforce Chapter 03 Section 21: Auto-login after registration is strictly forbidden!
-      if (res.data?.session) {
-        await authApi.signOut();
         return {
           success: true,
           message:
             'Registration সফল হয়েছে। আপনার Account এখন Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
         };
       }
-
-      await refreshData();
-      return {
-        success: true,
-        message:
-          'Registration সফল হয়েছে। আপনার Account এখন Admin Approval-এর অপেক্ষায় আছে। Admin Approval না পাওয়া পর্যন্ত আপনি System-এ Login করতে পারবেন না।',
-      };
+    } finally {
+      isRegisteringRef.current = false;
     }
 
     // Live Preview fallback mode
