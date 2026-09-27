@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS public.support_records (
     is_verified BOOLEAN NOT NULL DEFAULT true,
     CONSTRAINT unique_supporter_per_link_per_day UNIQUE (community_id, date, link_id, supporter_id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_link_supporter ON public.support_records (link_id, supporter_id);
 
 -- 5. ALL DONE TABLE
 CREATE TABLE IF NOT EXISTS public.all_done (
@@ -387,7 +388,8 @@ AS $$
 DECLARE
     v_auth_uid UUID := auth.uid();
     v_member public.members%ROWTYPE;
-    v_today DATE := (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka');
+    v_today DATE := (NOW() AT TIME ZONE 'Asia/Dhaka')::DATE;
+    v_bdt_time TIME := (NOW() AT TIME ZONE 'Asia/Dhaka')::TIME;
     v_next_serial INTEGER;
     v_serial_display VARCHAR(10);
     v_part_number INTEGER;
@@ -403,11 +405,25 @@ BEGIN
         RAISE EXCEPTION 'MEMBER_NOT_FOUND: Member profile not provisioned.';
     END IF;
 
-    IF v_member.status = 'SUSPENDED' OR v_member.status = 'FROZEN' THEN
+    IF v_member.status <> 'ACTIVE' THEN
         RAISE EXCEPTION 'MEMBER_INACTIVE: Account is currently %.', v_member.status;
     END IF;
 
-    IF v_member.role = 'MEMBER' AND p_category = 'NORMAL' THEN
+    IF v_member.can_submit_links = FALSE THEN
+        RAISE EXCEPTION 'LINK_SUBMISSION_DISABLED: Your link submission permission is currently disabled.';
+    END IF;
+
+    -- Enforce category authorization: Only Admin/Dev can submit VIP/ADMIN/NOTICE category
+    IF v_member.role = 'MEMBER' AND p_category <> 'NORMAL' THEN
+        RAISE EXCEPTION 'FORBIDDEN_CATEGORY: Regular members can only submit NORMAL category links.';
+    END IF;
+
+    -- Enforce Submission Time Window: 10:00 AM - 04:50 PM BDT for normal members
+    IF v_member.role = 'MEMBER' AND (v_bdt_time < '10:00:00'::TIME OR v_bdt_time > '16:50:00'::TIME) THEN
+        RAISE EXCEPTION 'SUBMISSION_CLOSED: Link submission window is open 10:00 AM - 04:50 PM Asia/Dhaka.';
+    END IF;
+
+    IF v_member.role = 'MEMBER' THEN
         SELECT COUNT(*) INTO v_existing_count 
         FROM public.daily_links 
         WHERE community_id = v_member.community_id AND date = v_today AND owner_id = v_member.id;
@@ -620,9 +636,13 @@ BEGIN
         v_base_points := 5;
     END IF;
 
-    -- Server-authoritative All Done start time validation (Default 17:00 Asia/Dhaka)
+    -- Server-authoritative All Done start time & deadline validation (Default 17:00 - 23:59:59 Asia/Dhaka)
     IF v_current_time < v_start_time THEN
         RAISE EXCEPTION 'ALL_DONE_NOT_OPEN: All Done submission window opens at % Asia/Dhaka.', v_start_time;
+    END IF;
+
+    IF v_current_time > '23:59:59'::TIME THEN
+        RAISE EXCEPTION 'ALL_DONE_CLOSED: Today''s All Done submission window has closed.';
     END IF;
 
     IF EXISTS (
@@ -632,9 +652,14 @@ BEGIN
         RAISE EXCEPTION 'ALL_DONE_ALREADY_SUBMITTED: You have already submitted All Done for today.';
     END IF;
 
+    -- Count required links ONLY for active links (prevents deadlock if admin removes a link)
     SELECT COUNT(*) INTO v_total_required_links
     FROM public.daily_links
-    WHERE community_id = v_member.community_id AND date = v_today AND owner_id <> v_member.id;
+    WHERE community_id = v_member.community_id AND date = v_today AND owner_id <> v_member.id AND (status IS NULL OR status = 'active');
+
+    IF v_total_required_links = 0 THEN
+        RAISE EXCEPTION 'NO_LINKS_TODAY: No active links available to support today.';
+    END IF;
 
     SELECT COUNT(DISTINCT link_id) INTO v_supported_count
     FROM public.support_records
@@ -1344,6 +1369,21 @@ BEGIN
         END IF;
     END IF;
 
+    IF (NEW.points IS DISTINCT FROM OLD.points OR 
+        NEW.weekly_points IS DISTINCT FROM OLD.weekly_points OR 
+        NEW.total_links_submitted IS DISTINCT FROM OLD.total_links_submitted OR 
+        NEW.total_supports_given IS DISTINCT FROM OLD.total_supports_given OR 
+        NEW.total_all_done IS DISTINCT FROM OLD.total_all_done OR 
+        NEW.can_submit_links IS DISTINCT FROM OLD.can_submit_links) THEN
+        IF current_setting('slb.internal_point_change', true) IS DISTINCT FROM 'true'
+           AND current_setting('slb.internal_role_change', true) IS DISTINCT FROM 'true'
+           AND current_setting('slb.internal_status_change', true) IS DISTINCT FROM 'true' THEN
+            IF NOT public.is_current_user_admin_or_dev() THEN
+                RAISE EXCEPTION 'SECURITY_VIOLATION: Direct point or counter modifications are prohibited.';
+            END IF;
+        END IF;
+    END IF;
+
     RETURN NEW;
 END;
 $$;
@@ -1538,7 +1578,8 @@ DROP POLICY IF EXISTS "Members readable by authenticated" ON public.members;
 CREATE POLICY "Members readable by authenticated" ON public.members FOR SELECT TO authenticated USING (true);
 
 DROP POLICY IF EXISTS "Members updateable by owner" ON public.members;
-CREATE POLICY "Members updateable by owner" ON public.members FOR UPDATE TO authenticated USING (auth_user_id = auth.uid()) WITH CHECK (auth_user_id = auth.uid());
+-- Member updates to security/points/status fields are strictly prohibited via client SQL.
+-- Profile edits are permitted via update_member_profile_secure() SECURITY DEFINER RPC.
 
 DROP POLICY IF EXISTS "Daily links readable by all authenticated" ON public.daily_links;
 CREATE POLICY "Daily links readable by all authenticated" ON public.daily_links FOR SELECT TO authenticated USING (true);

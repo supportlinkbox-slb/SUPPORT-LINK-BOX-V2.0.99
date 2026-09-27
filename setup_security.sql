@@ -112,7 +112,7 @@ BEGIN
   LIMIT 1;
 
   IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', true, 'locked', false);
+    RETURN jsonb_build_object('success', true, 'locked', false, 'remaining_seconds', 0);
   END IF;
 
   IF v_member.locked_until IS NOT NULL AND v_member.locked_until > NOW() THEN
@@ -128,8 +128,7 @@ BEGIN
   RETURN jsonb_build_object(
     'success', true,
     'locked', v_locked,
-    'remaining_seconds', v_remaining_seconds,
-    'email', v_member.email -- Securely return email so backend can authenticate via Auth if it was SLB-001
+    'remaining_seconds', v_remaining_seconds
   );
 END;
 $$;
@@ -157,7 +156,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- Verify caller is admin or developer (simplified check, usually you'd check auth.uid())
+  IF NOT public.is_current_user_admin_or_dev() THEN
+    RAISE EXCEPTION 'UNAUTHORIZED: Admin or Developer role required to unlock accounts.';
+  END IF;
+
   UPDATE public.members
   SET failed_attempts = 0,
       locked_until = NULL

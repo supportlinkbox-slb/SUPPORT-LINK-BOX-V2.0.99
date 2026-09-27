@@ -49,9 +49,11 @@ export const AdminDashboard: React.FC = () => {
     rejectMember,
     updateMemberRole,
     updateMemberStatus,
+    deleteDailyLink,
+    verifyFakeAllDone,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'OVERVIEW' | 'INVITE' | 'SETTINGS' | 'MOVIE_LOVER'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'TODAYS_LINKS' | 'SUPPORT_MATRIX' | 'OVERVIEW' | 'INVITE' | 'SETTINGS' | 'MOVIE_LOVER'>('REQUESTS');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -233,7 +235,7 @@ export const AdminDashboard: React.FC = () => {
           <span className="text-[10px] text-cyan-400 font-mono">SELECT MODULE</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
           {/* Module 1: Requests */}
           <button
             onClick={() => setActiveTab('REQUESTS')}
@@ -254,7 +256,7 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
             <div>
-              <div className="text-xs font-black truncate">অনুরোধ (Requests)</div>
+              <div className="text-xs font-black truncate">অনুরোধ</div>
               <div className="text-[10px] text-slate-400 truncate">রেজিস্ট্রেশন আবেদন</div>
             </div>
           </button>
@@ -278,11 +280,54 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div>
               <div className="text-xs font-black truncate">সদস্য তালিকা</div>
-              <div className="text-[10px] text-slate-400 truncate">সকল সক্রিয় মেম্বার</div>
+              <div className="text-[10px] text-slate-400 truncate">সকল মেম্বার</div>
             </div>
           </button>
 
-          {/* Module 3: Operational Overview */}
+          {/* Module 3: Today's Links Manager */}
+          <button
+            onClick={() => setActiveTab('TODAYS_LINKS')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'TODAYS_LINKS'
+                ? 'bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-900 border-emerald-500 text-white shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'TODAYS_LINKS' ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-800 text-emerald-400 group-hover:bg-slate-700'}`}>
+                <LinkIcon className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">
+                {dailyLinks.length}
+              </span>
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">আজকের লিংকস</div>
+              <div className="text-[10px] text-slate-400 truncate">এডিট/সিরিয়াল/ডিলিট</div>
+            </div>
+          </button>
+
+          {/* Module 4: Live Support Matrix & Punishments */}
+          <button
+            onClick={() => setActiveTab('SUPPORT_MATRIX')}
+            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
+              activeTab === 'SUPPORT_MATRIX'
+                ? 'bg-gradient-to-br from-red-950 via-slate-900 to-slate-900 border-red-500 text-white shadow-lg shadow-red-500/20 ring-1 ring-red-500/50'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`p-2 rounded-xl transition ${activeTab === 'SUPPORT_MATRIX' ? 'bg-red-500 text-white font-bold' : 'bg-slate-800 text-red-400 group-hover:bg-slate-700'}`}>
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-black truncate">সাপোর্ট ম্যাট্রিক্স</div>
+              <div className="text-[10px] text-slate-400 truncate">ফেইক অল ডান / শাস্তি</div>
+            </div>
+          </button>
+
+          {/* Module 5: Operational Overview */}
           <button
             onClick={() => setActiveTab('OVERVIEW')}
             className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
@@ -298,11 +343,11 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div>
               <div className="text-xs font-black truncate">সারসংক্ষেপ</div>
-              <div className="text-[10px] text-slate-400 truncate">অপারেশনাল ওভারভিউ</div>
+              <div className="text-[10px] text-slate-400 truncate">অপারেশন ওভারভিউ</div>
             </div>
           </button>
 
-          {/* Module 4: Admin Invite */}
+          {/* Module 6: Admin Invite */}
           <button
             onClick={() => setActiveTab('INVITE')}
             className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
@@ -318,11 +363,11 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div>
               <div className="text-xs font-black truncate">ইনভাইট</div>
-              <div className="text-[10px] text-slate-400 truncate">নতুন সদস্য টোকেন</div>
+              <div className="text-[10px] text-slate-400 truncate">সদস্য টোকেন</div>
             </div>
           </button>
 
-          {/* Module 5: System Settings */}
+          {/* Module 7: System Settings */}
           <button
             onClick={() => setActiveTab('SETTINGS')}
             className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
@@ -342,7 +387,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </button>
 
-          {/* Module 6: Movie Lover */}
+          {/* Module 8: Movie Lover */}
           <button
             onClick={() => setActiveTab('MOVIE_LOVER')}
             className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
@@ -358,7 +403,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div>
               <div className="text-xs font-black truncate">মুভি লাভার</div>
-              <div className="text-[10px] text-slate-400 truncate">মুভি ম্যানেজমেন্ট</div>
+              <div className="text-[10px] text-slate-400 truncate">মুভি ও সিকিউরিটি</div>
             </div>
           </button>
         </div>
@@ -664,6 +709,146 @@ export const AdminDashboard: React.FC = () => {
                   <p className="text-[11px] text-slate-400">{log.details}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: TODAY'S LINKS MANAGER */}
+      {activeTab === 'TODAYS_LINKS' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <LinkIcon className="w-5 h-5 text-emerald-400" />
+                <span>আজকের লিংকস ম্যানেজমেন্ট ({dailyLinks.length})</span>
+              </h3>
+              <p className="text-xs text-slate-400">সকলের জমা দেওয়া লিংকের তালিকা, এডিট, ডিলিট ও অ্যাডমিন অ্যাকশন।</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="p-3">#Serial</th>
+                  <th className="p-3">Owner</th>
+                  <th className="p-3">Category</th>
+                  <th className="p-3">Post Link</th>
+                  <th className="p-3">Submitted At</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {dailyLinks.map((link) => (
+                  <tr key={link.id} className="hover:bg-slate-850/50 transition">
+                    <td className="p-3 font-mono font-bold text-cyan-400">#{link.serial_display} (P{link.part_number})</td>
+                    <td className="p-3 font-bold text-white">{link.owner_name} ({link.owner_member_number})</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        link.category === 'VIP' ? 'bg-purple-950 text-purple-300 border border-purple-800' :
+                        link.category === 'ADMIN' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                        'bg-slate-800 text-slate-300'
+                      }`}>
+                        {link.category}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <a href={link.fb_link} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline flex items-center gap-1 max-w-[200px] truncate">
+                        <span className="truncate">{link.fb_link}</span>
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                    </td>
+                    <td className="p-3 text-slate-400 font-mono">{formatToBDT(link.submitted_at)}</td>
+                    <td className="p-3 text-right">
+                      <button
+                        onClick={async () => {
+                          if (confirm(`আপনি কি সত্যিই #${link.serial_display} লিংকটি ডিলিট করতে চান?`)) {
+                            await deleteDailyLink(link.id);
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded-lg text-[11px] font-bold border border-red-800 transition"
+                      >
+                        ডিলিট
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 8: LIVE SUPPORT MATRIX & FAKE ALL DONE MANAGER */}
+      {activeTab === 'SUPPORT_MATRIX' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-red-400" />
+                <span>লাইভ সাপোর্ট ম্যাট্রিক্স ও ফেইক অল ডান মনিটরিং</span>
+              </h3>
+              <p className="text-xs text-slate-400">আজকের কোন মেম্বার কতটি লিংকে সাপোর্ট দিয়েছে ও ফেইক অল ডান পেনাল্টি ইন্টারফেস।</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* All Done Submissions Review & Punishment */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">আজকের All Done জমাদানকারীগণ ({allDoneRecords.length})</h4>
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {allDoneRecords.map((ad) => (
+                  <div key={ad.id} className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between gap-2 text-xs">
+                    <div>
+                      <div className="font-bold text-white flex items-center gap-1.5">
+                        <span>{ad.member_name}</span>
+                        <span className="text-[10px] font-mono text-cyan-400">({ad.member_number})</span>
+                        {ad.fastest_rank && <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[9px]">#{ad.fastest_rank}</span>}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono mt-0.5">সময়: {formatToBDT(ad.completed_at)} • পয়েন্ট: +{ad.total_points}</div>
+                    </div>
+                    {ad.status !== 'REVOKED' ? (
+                      <button
+                        onClick={async () => {
+                          const reason = prompt(`${ad.member_name}-এর বিরুদ্ধে ফেইক অল ডানের কারণ বা নোট লিখুন:`);
+                          if (reason) {
+                            await verifyFakeAllDone(ad.id, reason);
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-[11px] shadow transition"
+                      >
+                        ফেইক অল ডান (Punish)
+                      </button>
+                    ) : (
+                      <span className="px-2 py-1 rounded bg-red-950 text-red-400 border border-red-800 font-bold text-[10px]">
+                        REVOKED & PENALIZED
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Member Support Matrix */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider">আজকের সাপোর্ট এক্টিভিটি ট্র্যাকার</h4>
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {members.filter(m => m.status === 'ACTIVE').map((m) => {
+                  const ad = allDoneRecords.find(a => a.member_id === m.id);
+                  return (
+                    <div key={m.id} className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between gap-2 text-xs">
+                      <div>
+                        <div className="font-bold text-white">{m.name} ({m.member_number})</div>
+                        <div className="text-[11px] text-slate-400">মোট পয়েন্ট: {m.points} • সাপ্তাহিক: {m.weekly_points}</div>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-[10px] font-bold ${ad ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-800 text-slate-400'}`}>
+                        {ad ? 'ALL DONE DONE' : 'PENDING'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

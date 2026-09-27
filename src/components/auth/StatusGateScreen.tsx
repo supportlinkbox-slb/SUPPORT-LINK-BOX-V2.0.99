@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShieldAlert, LogOut, Clock, Ban, UserX, PlayCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MemberProfile } from '../../types';
+import { supabase } from '../../lib/supabase';
 import { DemoAdModal } from '../common/DemoAdModal';
 
 interface StatusGateScreenProps {
@@ -13,7 +14,18 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
   const [isAdOpen, setIsAdOpen] = useState(false);
 
   const handleAdCompleted = async () => {
-    await updateMemberStatus(user.id, 'ACTIVE');
+    // Invoke server-side ad recovery RPC instead of direct client-side status update
+    try {
+      const { error } = await supabase.rpc('rpc_complete_ad_recovery', { p_member_id: user.id });
+      if (error) {
+        alert('অ্যাড রিকভারিতে সমস্যা হয়েছে: ' + error.message);
+      } else {
+        alert('আপনার অ্যাড রিকভারি সফল হয়েছে। পেজ রিফ্রেশ করুন।');
+        window.location.reload();
+      }
+    } catch {
+      alert('সার্ভার রিকভারি রেসপন্স দিতে পারেনি। এডমিনের সাথে যোগাযোগ করুন।');
+    }
   };
 
   const getStatusDetails = () => {
