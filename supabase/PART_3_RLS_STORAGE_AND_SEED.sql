@@ -144,7 +144,20 @@ DROP POLICY IF EXISTS "Members view own notifications" ON public.notifications;
 CREATE POLICY "Members view own notifications" ON public.notifications FOR SELECT TO authenticated
 USING (
     EXISTS (
-        SELECT 1 FROM public.members WHERE id = notifications.member_id AND auth_user_id = auth.uid()
+        SELECT 1 FROM public.members 
+        WHERE id = notifications.member_id AND auth_user_id = auth.uid() AND (status = 'ACTIVE' OR public.is_current_user_admin_or_dev())
+    )
+);
+
+-- Notices
+DROP POLICY IF EXISTS "Members view notices" ON public.notices;
+CREATE POLICY "Members view notices" ON public.notices FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.members 
+        WHERE (id = notices.target_member_id AND auth_user_id = auth.uid())
+           OR (notices.target_member_id IS NULL AND auth_user_id = auth.uid() AND status = 'ACTIVE')
+           OR public.is_current_user_admin_or_dev()
     )
 );
 

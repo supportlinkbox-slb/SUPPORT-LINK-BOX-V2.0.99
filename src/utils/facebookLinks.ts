@@ -144,29 +144,33 @@ export function validateAndExtractFacebookProfile(rawUrl: string): FacebookProfi
 
 /**
  * Opens Facebook link externally.
- * Mode 'APP': Uses deep-link schema fb://facewebmodal to launch Facebook Android/iOS app.
- * Mode 'WEB': Uses standard browser window.open.
+ * Mode 'APP' (Default): Uses deep-link schema fb://faceweb/f?href= to launch Facebook Android/iOS app natively for gesture navigation.
+ * Mode 'WEB': Uses standard browser window.open for desktop or web browsing.
  */
+export function getFacebookAppDeepLink(url: string): string {
+  const normalized = normalizeFacebookUrl(url);
+  if (!normalized) return '';
+  return `fb://faceweb/f?href=${encodeURIComponent(normalized)}`;
+}
+
 export function openFacebookPostExternally(url: string, mode: 'APP' | 'WEB' = 'APP'): Window | null {
   const normalized = normalizeFacebookUrl(url);
   if (!normalized) return null;
 
   if (mode === 'APP') {
-    // Generate fb:// deep link format for Facebook App
-    const deepLinkUrl = normalized.replace(
-      /^https?:\/\/(www\.|m\.|mobile\.|web\.)?facebook\.com\//i,
-      'fb://facewebmodal/f?href=https://facebook.com/'
-    );
+    // Generate fb://faceweb/f?href= deep link format for native Facebook App (Blueprint Chapter 01 & 05)
+    const deepLinkUrl = getFacebookAppDeepLink(normalized);
 
     try {
-      // Attempt location jump for native app handler
+      // Trigger native Android/iOS Facebook app handler
       window.location.href = deepLinkUrl;
       return null;
     } catch {
-      // Fallback to standard web open if deep link fails
+      // Fallback to standard web open if deep link protocol is unhandled
       return window.open(normalized, '_blank', 'noopener,noreferrer');
     }
   }
 
+  // Web mode: Open Facebook post cleanly in external browser tab
   return window.open(normalized, '_blank', 'noopener,noreferrer');
 }

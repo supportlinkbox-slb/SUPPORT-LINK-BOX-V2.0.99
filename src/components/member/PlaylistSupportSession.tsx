@@ -59,11 +59,30 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
     return sessionStorage.getItem(STORAGE_SESSION_LINK_KEY);
   });
 
-  // Facebook Opening Mode: 'APP' (default deep-link) vs 'WEB'
-  const [fbOpenMode, setFbOpenMode] = useState<'APP' | 'WEB'>('APP');
+  // Facebook Opening Mode: 'APP' (default deep-link) vs 'WEB' (Chapter 01 & 05)
+  const [supportMode, setSupportMode] = useState<'APP' | 'WEB'>(() => {
+    const saved = localStorage.getItem('slb_support_mode');
+    return saved === 'WEB' ? 'WEB' : 'APP';
+  });
+  const fbOpenMode = supportMode;
+  const setFbOpenMode = (mode: 'APP' | 'WEB') => {
+    setSupportMode(mode);
+    localStorage.setItem('slb_support_mode', mode);
+  };
 
-  // Fast Support System: Auto Next toggle & 5s Countdown Timer
-  const [autoNextEnabled, setAutoNextEnabled] = useState<boolean>(true);
+  // Fast Support System: Auto Next toggle (Default ON) & Countdown Timer
+  const [autoNextEnabled, setAutoNextEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('slb_auto_next_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const toggleAutoNext = () => {
+    setAutoNextEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem('slb_auto_next_enabled', String(next));
+      return next;
+    });
+    setAutoNextCountdown(null);
+  };
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
 
   // Part-based Filter State ('ALL' or part number)
@@ -149,11 +168,11 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
     [activeTodaysLinks, canSupportLink, isLinkSupported]
   );
 
-  // Post-Facebook Return Handler (Pageshow, VisibilityChange, Focus)
+  // Post-Facebook Return Handler (Pageshow, VisibilityChange, Focus) - Blueprint Section 5 Gesture Return
   const handleReturnFromFacebook = useCallback(async () => {
     const now = Date.now();
-    // Throttle checks (avoid rapid loop within 1.5s)
-    if (now - lastReturnCheckTimeRef.current < 1500) return;
+    // Throttle checks (avoid rapid duplicate triggering within 1.2s)
+    if (now - lastReturnCheckTimeRef.current < 1200) return;
     lastReturnCheckTimeRef.current = now;
 
     const targetLinkId = openedLinkIdRef.current;
@@ -162,20 +181,17 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
     // Trigger state refresh from server
     await refreshData();
 
-    // Chapter 9 verification abstraction hook
-    try {
-      const verifyRes = await supportApi.verifySupportStatus(targetLinkId);
-      if (verifyRes.success && verifyRes.data?.is_supported) {
-        setStatusNotice('ফেসবুক থেকে সফলভাবে ফিরে এসেছেন! পরবর্তী পেন্ডিং লিংক লোড করা হলো।');
-        advanceToNextPending(targetLinkId);
-      }
-    } catch {
-      // Graceful fallback
-    } finally {
-      openedLinkIdRef.current = null;
-      setTimeout(() => setStatusNotice(null), 4000);
+    // Auto-advance to next pending link if Auto Next is enabled
+    if (autoNextEnabled) {
+      setStatusNotice('ফেসবুক থেকে ফিরে এসেছেন! পরবর্তী পেন্ডিং লিংক স্বয়ংক্রিয়ভাবে লোড করা হয়েছে।');
+      advanceToNextPending(targetLinkId);
+    } else {
+      setStatusNotice('ফেসবুক থেকে সফলভাবে ফিরে এসেছেন। আপনার সাপোর্ট রেকর্ড হালনাগাদ করা হয়েছে।');
     }
-  }, [advanceToNextPending, refreshData]);
+
+    openedLinkIdRef.current = null;
+    setTimeout(() => setStatusNotice(null), 4000);
+  }, [advanceToNextPending, refreshData, autoNextEnabled]);
 
   // Attach multi-signal return listeners (visibilitychange, pageshow, focus)
   useEffect(() => {

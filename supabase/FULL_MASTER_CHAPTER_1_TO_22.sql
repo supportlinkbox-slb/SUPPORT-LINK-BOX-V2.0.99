@@ -543,6 +543,43 @@ BEGIN
 END;
 $$;
 
+-- Role Checking Function (Strictly requires ACTIVE status for Admin/Developer)
+CREATE OR REPLACE FUNCTION public.is_current_user_admin_or_dev()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_role user_role;
+    v_status member_status;
+BEGIN
+    SELECT role, status INTO v_role, v_status
+    FROM public.members
+    WHERE auth_user_id = auth.uid();
+    
+    RETURN v_role IN ('ADMIN', 'DEVELOPER') AND v_status = 'ACTIVE';
+END;
+$$;
+
+-- Active Status Checking Function (Returns TRUE only if caller has ACTIVE status)
+CREATE OR REPLACE FUNCTION public.is_current_user_active()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_status member_status;
+BEGIN
+    SELECT status INTO v_status
+    FROM public.members
+    WHERE auth_user_id = auth.uid();
+    
+    RETURN v_status = 'ACTIVE';
+END;
+$$;
+
 -- Protect Member Auth User ID from unauthorized takeover
 CREATE OR REPLACE FUNCTION public.protect_member_auth_user_id()
 RETURNS TRIGGER
@@ -1427,39 +1464,136 @@ ALTER TABLE public.vip_reward_entitlements ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "members_select_policy" ON public.members;
 CREATE POLICY "members_select_policy" ON public.members
     FOR SELECT TO authenticated
-    USING (community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()));
+    USING (
+        auth_user_id = auth.uid()
+        OR (public.is_current_user_active() AND community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()))
+        OR public.is_current_user_admin_or_dev()
+    );
 
 DROP POLICY IF EXISTS "members_update_own" ON public.members;
 CREATE POLICY "members_update_own" ON public.members
     FOR UPDATE TO authenticated
-    USING (auth_user_id = auth.uid())
-    WITH CHECK (auth_user_id = auth.uid());
+    USING (
+        (auth_user_id = auth.uid() AND public.is_current_user_active())
+        OR public.is_current_user_admin_or_dev()
+    )
+    WITH CHECK (
+        (auth_user_id = auth.uid() AND public.is_current_user_active())
+        OR public.is_current_user_admin_or_dev()
+    );
 
 -- Daily Links Policies
 DROP POLICY IF EXISTS "daily_links_select" ON public.daily_links;
 CREATE POLICY "daily_links_select" ON public.daily_links
     FOR SELECT TO authenticated
-    USING (community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()));
+    USING (
+        (public.is_current_user_active() AND community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()))
+        OR public.is_current_user_admin_or_dev()
+    );
+
+DROP POLICY IF EXISTS "daily_links_insert" ON public.daily_links;
+CREATE POLICY "daily_links_insert" ON public.daily_links
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.members
+            WHERE id = daily_links.owner_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
+        ) OR public.is_current_user_admin_or_dev()
+    );
 
 -- Support Records Policies
 DROP POLICY IF EXISTS "support_records_select" ON public.support_records;
 CREATE POLICY "support_records_select" ON public.support_records
     FOR SELECT TO authenticated
-    USING (community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()));
+    USING (
+        (public.is_current_user_active() AND community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()))
+        OR public.is_current_user_admin_or_dev()
+    );
+
+DROP POLICY IF EXISTS "support_records_insert" ON public.support_records;
+CREATE POLICY "support_records_insert" ON public.support_records
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.members
+            WHERE id = support_records.supporter_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
+        )
+    );
 
 -- All Done Policies
 DROP POLICY IF EXISTS "all_done_select" ON public.all_done;
 CREATE POLICY "all_done_select" ON public.all_done
     FOR SELECT TO authenticated
-    USING (community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()));
+    USING (
+        (public.is_current_user_active() AND community_id = (SELECT community_id FROM public.members WHERE auth_user_id = auth.uid()))
+        OR public.is_current_user_admin_or_dev()
+    );
+
+DROP POLICY IF EXISTS "all_done_insert" ON public.all_done;
+CREATE POLICY "all_done_insert" ON public.all_done
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.members
+            WHERE id = all_done.member_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
+        )
+    );
+
+-- Scheduled Links Policies
+DROP POLICY IF EXISTS "scheduled_links_select" ON public.scheduled_links;
+CREATE POLICY "scheduled_links_select" ON public.scheduled_links
+    FOR SELECT TO authenticated
+    USING (
+        (owner_id = (SELECT id FROM public.members WHERE auth_user_id = auth.uid()) AND public.is_current_user_active())
+        OR public.is_current_user_admin_or_dev()
+    );
+
+-- Reports Policies
+DROP POLICY IF EXISTS "reports_select" ON public.reports;
+CREATE POLICY "reports_select" ON public.reports
+    FOR SELECT TO authenticated
+    USING (
+        (reporter_id = (SELECT id FROM public.members WHERE auth_user_id = auth.uid()) AND public.is_current_user_active())
+        OR (link_owner_id = (SELECT id FROM public.members WHERE auth_user_id = auth.uid()) AND public.is_current_user_active())
+        OR public.is_current_user_admin_or_dev()
+    );
+
+DROP POLICY IF EXISTS "reports_insert" ON public.reports;
+CREATE POLICY "reports_insert" ON public.reports
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.members
+            WHERE id = reports.reporter_id AND auth_user_id = auth.uid() AND status = 'ACTIVE'
+        )
+    );
+
+-- Notifications Policies
+DROP POLICY IF EXISTS "notifications_select" ON public.notifications;
+CREATE POLICY "notifications_select" ON public.notifications
+    FOR SELECT TO authenticated
+    USING (
+        member_id = (SELECT id FROM public.members WHERE auth_user_id = auth.uid())
+        AND (public.is_current_user_active() OR public.is_current_user_admin_or_dev())
+    );
+
+-- Notices Policies
+DROP POLICY IF EXISTS "notices_select" ON public.notices;
+CREATE POLICY "notices_select" ON public.notices
+    FOR SELECT TO authenticated
+    USING (
+        (target_member_id = (SELECT id FROM public.members WHERE auth_user_id = auth.uid()))
+        OR (target_member_id IS NULL AND public.is_current_user_active())
+        OR public.is_current_user_admin_or_dev()
+    );
 
 -- Point Transactions Policies
 DROP POLICY IF EXISTS "point_tx_select" ON public.point_transactions;
 CREATE POLICY "point_tx_select" ON public.point_transactions
     FOR SELECT TO authenticated
     USING (
-        member_id = (SELECT id FROM public.members WHERE auth_user_id = auth.uid())
-        OR (SELECT role FROM public.members WHERE auth_user_id = auth.uid()) IN ('ADMIN', 'DEVELOPER')
+        (member_id = (SELECT id FROM public.members WHERE auth_user_id = auth.uid()) AND public.is_current_user_active())
+        OR public.is_current_user_admin_or_dev()
     );
 
 -- Media Items Policies (Ch 18)

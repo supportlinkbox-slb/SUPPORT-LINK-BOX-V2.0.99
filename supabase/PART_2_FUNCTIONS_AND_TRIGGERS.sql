@@ -8,7 +8,7 @@
 
 -- 1. HELPER SECURITY FUNCTIONS
 
--- Role Checking Function
+-- Role Checking Function (Strictly requires ACTIVE status for Admin/Developer)
 CREATE OR REPLACE FUNCTION public.is_current_user_admin_or_dev()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -17,12 +17,31 @@ SET search_path = public
 AS $$
 DECLARE
     v_role user_role;
+    v_status member_status;
 BEGIN
-    SELECT role INTO v_role
+    SELECT role, status INTO v_role, v_status
     FROM public.members
     WHERE auth_user_id = auth.uid();
     
-    RETURN v_role IN ('ADMIN', 'DEVELOPER');
+    RETURN v_role IN ('ADMIN', 'DEVELOPER') AND v_status = 'ACTIVE';
+END;
+$$;
+
+-- Active Status Checking Function (Returns TRUE only if caller has ACTIVE status)
+CREATE OR REPLACE FUNCTION public.is_current_user_active()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_status member_status;
+BEGIN
+    SELECT status INTO v_status
+    FROM public.members
+    WHERE auth_user_id = auth.uid();
+    
+    RETURN v_status = 'ACTIVE';
 END;
 $$;
 

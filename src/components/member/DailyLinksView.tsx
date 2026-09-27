@@ -19,6 +19,7 @@ import {
 import { DailyLink } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { canEditSubmission, formatToBDT } from '../../utils/bangladeshTime';
+import { openFacebookPostExternally } from '../../utils/facebookLinks';
 import { LinkEditModal } from './LinkEditModal';
 import { ReportModal } from './ReportModal';
 import { ScheduleModal } from './ScheduleModal';
@@ -346,7 +347,10 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
 
                     {/* Primary Action: Support Now (External Facebook Workflow) */}
                     <button
-                      onClick={() => supportLink(link)}
+                      onClick={async () => {
+                        openFacebookPostExternally(link.fb_link, 'APP');
+                        await supportLink(link);
+                      }}
                       disabled={isOwnLink}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm ${
                         isSupported
