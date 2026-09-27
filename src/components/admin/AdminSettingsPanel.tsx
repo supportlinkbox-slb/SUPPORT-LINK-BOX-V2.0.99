@@ -27,8 +27,10 @@ import { useApp } from '../../context/AppContext';
 import { SystemSettings, AdminSupportContact } from '../../types';
 import { SystemResetModal } from './SystemResetModal';
 import { AdminNoticeGeneratorModal } from './AdminNoticeGeneratorModal';
+import { FestivalThemeManagerModal } from './FestivalThemeManagerModal';
+import { FESTIVAL_THEMES } from '../../types/festivalTheme';
 
-type SettingSectionTab = 'schedule' | 'rules' | 'contact' | 'recovery' | 'backup' | 'security';
+type SettingSectionTab = 'schedule' | 'rules' | 'contact' | 'recovery' | 'theme' | 'backup' | 'security';
 
 export const AdminSettingsPanel: React.FC = () => {
   const {
@@ -39,10 +41,14 @@ export const AdminSettingsPanel: React.FC = () => {
     allDoneRecords,
     updateMemberStatus,
     refreshData,
+    activeFestivalTheme,
+    currentThemeConfig,
+    setActiveFestivalThemeState,
   } = useApp();
 
   const isDev = currentUser?.role === 'DEVELOPER';
   const [activeTab, setActiveTab] = useState<SettingSectionTab>('schedule');
+  const [isThemeManagerModalOpen, setIsThemeManagerModalOpen] = useState(false);
 
   // System Settings State
   const [settings, setSettings] = useState<SystemSettings>({
@@ -124,6 +130,7 @@ export const AdminSettingsPanel: React.FC = () => {
     { id: 'schedule', label: 'সময়সীমা ও সিডিউল', icon: Clock, desc: 'লিংক জমা ও অল ডান সময়' },
     { id: 'rules', label: 'নিয়ম ও ফ্রি লিমিট', icon: Sliders, desc: 'লেট লিমিট ও থ্রেশহোল্ড' },
     { id: 'contact', label: 'সাপোর্ট হেল্পলাইন', icon: PhoneCall, desc: 'এডমিন ফেসবুক ও হোয়াটসঅ্যাপ' },
+    { id: 'theme', label: 'উৎসব ও বিশেষ দিবস থিম', icon: Sparkles, desc: 'জুম্মা, ঈদ, বৈশাখী শুভেচ্ছা থিম' },
     { id: 'recovery', label: 'রিকভারি ম্যানেজার', icon: UserCheck, desc: '৩/৭ দিন নিষ্ক্রিয় ডিউটি' },
     { id: 'backup', label: 'ডেটা ও ব্যাকআপ', icon: FileSpreadsheet, desc: 'CSV ডিরেক্টরি ডাউনলোড' },
     { id: 'security', label: 'সিকিউরিটি ও রিসেট', icon: AlertTriangle, desc: 'ডেভেলপার রিসেট সেন্টার' },
@@ -486,6 +493,93 @@ export const AdminSettingsPanel: React.FC = () => {
             </div>
           )}
 
+          {/* Section: Festival & Special Day Themes */}
+          {activeTab === 'theme' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-5 shadow-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-3 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>উৎসব ও বিশেষ দিবস থিম কন্ট্রোলার</span>
+                      {activeFestivalTheme.isActive && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                          {currentThemeConfig.badge} সক্রিয়
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      জুম্মা, ঈদ, পহেলা বৈশাখ, স্বাধীনতা ও বিজয় দিবসের জন্য পুরো সাইটে থিম ও স্বাগতম বার্তা সক্রিয় করুন।
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsThemeManagerModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 shrink-0"
+                >
+                  <Sparkles className="w-4 h-4 stroke-[2.5]" />
+                  <span>থিম পরিবর্তন / সেট করুন</span>
+                </button>
+              </div>
+
+              {/* Current Active Theme Preview */}
+              <div className={`p-4 rounded-2xl border ${currentThemeConfig.bannerBg} flex items-center justify-between gap-4 transition shadow-inner`}>
+                <div className="flex items-center gap-3.5">
+                  <span className="text-4xl select-none">{currentThemeConfig.icon}</span>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                      <span>{currentThemeConfig.name}</span>
+                      <span className="text-[10px] text-amber-300 font-mono font-bold">
+                        ({currentThemeConfig.badge})
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5 max-w-md">
+                      {activeFestivalTheme.customGreeting || currentThemeConfig.greetingTitle}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    activeFestivalTheme.isActive
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {activeFestivalTheme.isActive ? 'ACTIVE' : 'DEFAULT'}
+                  </span>
+                  {activeFestivalTheme.isActive && activeFestivalTheme.expiresAt && (
+                    <div className="text-[10px] text-slate-400 font-mono mt-1">
+                      মেয়াদ: {new Date(activeFestivalTheme.expiresAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Supported Themes Grid */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-400 block">উপলব্ধ উৎসব থিমসমূহ:</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {Object.values(FESTIVAL_THEMES).filter(t => t.id !== 'DEFAULT').map(t => (
+                    <div
+                      key={t.id}
+                      className="p-3 rounded-2xl bg-slate-950 border border-slate-800/80 flex items-center gap-2.5 text-xs"
+                    >
+                      <span className="text-2xl select-none">{t.icon}</span>
+                      <div>
+                        <span className="font-bold text-slate-200 block text-[11px] truncate">{t.name}</span>
+                        <span className="text-[9px] text-amber-400 font-mono">{t.badge}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Section 5: Data Backup & CSV */}
           {activeTab === 'backup' && (
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
@@ -565,6 +659,14 @@ export const AdminSettingsPanel: React.FC = () => {
         <AdminNoticeGeneratorModal
           isOpen={isNoticeGeneratorOpen}
           onClose={() => setIsNoticeGeneratorOpen(false)}
+        />
+      )}
+
+      {/* Festival Theme Manager Modal */}
+      {isThemeManagerModalOpen && (
+        <FestivalThemeManagerModal
+          isOpen={isThemeManagerModalOpen}
+          onClose={() => setIsThemeManagerModalOpen(false)}
         />
       )}
     </div>

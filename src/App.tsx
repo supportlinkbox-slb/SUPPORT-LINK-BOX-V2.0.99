@@ -16,13 +16,14 @@ import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { StatusGateScreen } from './components/auth/StatusGateScreen';
 import { BottomNavBar } from './components/layout/BottomNavBar';
+import { FestivalWelcomeModal } from './components/common/FestivalWelcomeModal';
 import { Flame, CheckCircle2, Shield, Heart } from 'lucide-react';
 
 function MainContent() {
   const [currentTab, setCurrentTab] = useState<string>('links');
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
 
-  const { currentUser, authLoading } = useApp();
+  const { currentUser, authLoading, currentThemeConfig, activeFestivalTheme } = useApp();
 
   if (authLoading) {
     return (
@@ -136,6 +137,14 @@ function MainContent() {
       <LinkSubmissionModal
         isOpen={submitModalOpen}
         onClose={() => setSubmitModalOpen(false)}
+      />
+
+      {/* Festival Welcome Greeting Modal */}
+      <FestivalWelcomeModal
+        theme={currentThemeConfig}
+        customGreeting={activeFestivalTheme.customGreeting}
+        customSubtitle={activeFestivalTheme.customSubtitle}
+        expiresAt={activeFestivalTheme.expiresAt}
       />
 
       {/* Mobile Bottom Navigation Bar */}

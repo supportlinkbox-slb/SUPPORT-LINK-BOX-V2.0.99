@@ -42,16 +42,37 @@ export const Navbar: React.FC<NavbarProps> = ({
     pendingRequiredSupportCount,
     isAllDoneSubmittedToday,
     isConfigured,
+    currentThemeConfig,
   } = useApp();
+
+  const isFestival = currentThemeConfig.id !== 'DEFAULT';
 
   const [bdtClock, setBdtClock] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    const update = () => setBdtClock(formatToBDT(new Date(), false));
+    const update = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      setBdtClock(formatToBDT(new Date(), false));
+    };
     update();
     const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
+
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        setBdtClock(formatToBDT(new Date(), false));
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
   }, []);
 
   const navItems = [
@@ -107,17 +128,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCurrentTab('links')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 text-white font-black text-xl">
-              SLB
+            <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${
+              isFestival ? currentThemeConfig.primaryGradient : 'from-cyan-500 to-blue-600'
+            } flex items-center justify-center shadow-md text-white font-black text-xl transition-all duration-500`}>
+              {isFestival ? <span className="text-lg select-none">{currentThemeConfig.icon}</span> : 'SLB'}
             </div>
             <div>
               <div className="flex items-center gap-1.5 font-extrabold text-base tracking-tight text-white">
                 <span>SUPPORT LINK BOX</span>
-                <span className="text-[10px] px-1.5 py-0.5 font-bold uppercase rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                  OFFICIAL
-                </span>
+                {isFestival ? (
+                  <span className="text-[10px] px-1.5 py-0.5 font-bold uppercase rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                    {currentThemeConfig.badge}
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 font-bold uppercase rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    OFFICIAL
+                  </span>
+                )}
               </div>
-              <p className="text-[11px] text-slate-400">বাংলাদেশ ফেসবুক সাপোর্ট কমিউনিটি</p>
+              <p className="text-[11px] text-slate-400">
+                {isFestival ? currentThemeConfig.greetingTitle : 'বাংলাদেশ ফেসবুক সাপোর্ট কমিউনিটি'}
+              </p>
             </div>
           </div>
 

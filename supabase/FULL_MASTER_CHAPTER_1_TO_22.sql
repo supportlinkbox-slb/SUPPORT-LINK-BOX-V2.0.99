@@ -1577,6 +1577,110 @@ BEGIN
 END;
 $$;
 
+-- 12. FETCH MEMBERS PAGINATED SECURE (HIGH PERFORMANCE SEARCH & FILTERING)
+CREATE OR REPLACE FUNCTION public.fetch_members_paginated(
+    p_search TEXT DEFAULT NULL,
+    p_role TEXT DEFAULT NULL,
+    p_status TEXT DEFAULT NULL,
+    p_page INT DEFAULT 1,
+    p_page_size INT DEFAULT 15
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_auth_uid UUID := auth.uid();
+    v_actor public.members%ROWTYPE;
+    v_offset INT;
+    v_total_count INT := 0;
+    v_members_json JSONB;
+    v_search_query TEXT;
+BEGIN
+    IF v_auth_uid IS NULL THEN RAISE EXCEPTION 'UNAUTHORIZED'; END IF;
+    SELECT * INTO v_actor FROM public.members WHERE auth_user_id = v_auth_uid;
+    IF NOT FOUND OR (v_actor.role <> 'ADMIN' AND v_actor.role <> 'DEVELOPER') THEN
+        RAISE EXCEPTION 'FORBIDDEN: Admin/Developer only.';
+    END IF;
+
+    IF p_page < 1 THEN p_page := 1; END IF;
+    IF p_page_size < 1 THEN p_page_size := 15; END IF;
+    IF p_page_size > 100 THEN p_page_size := 100; END IF;
+    v_offset := (p_page - 1) * p_page_size;
+
+    IF p_search IS NOT NULL AND TRIM(p_search) <> '' THEN
+        v_search_query := '%' || LOWER(TRIM(p_search)) || '%';
+    END IF;
+
+    -- Count total matches
+    SELECT COUNT(*) INTO v_total_count
+    FROM public.members m
+    WHERE (v_actor.role = 'DEVELOPER' OR m.community_id = v_actor.community_id)
+      AND (p_role IS NULL OR p_role = 'ALL' OR m.role = p_role)
+      AND (p_status IS NULL OR p_status = 'ALL' OR m.status = p_status)
+      AND (
+          v_search_query IS NULL OR
+          LOWER(m.name) LIKE v_search_query OR
+          LOWER(m.member_number) LIKE v_search_query OR
+          LOWER(COALESCE(m.email, '')) LIKE v_search_query OR
+          LOWER(COALESCE(m.facebook_name, '')) LIKE v_search_query
+      );
+
+    -- Fetch paginated slice
+    SELECT COALESCE(jsonb_agg(to_jsonb(sub)), '[]'::jsonb) INTO v_members_json
+    FROM (
+        SELECT 
+            m.id,
+            m.community_id,
+            m.member_number,
+            m.name,
+            m.email,
+            m.phone,
+            m.role,
+            m.status,
+            m.facebook_name,
+            m.facebook_url,
+            m.facebook_profile_url,
+            m.profile_photo_url,
+            m.points,
+            m.vip_points,
+            m.is_vip,
+            m.total_supports_given,
+            m.total_supports_received,
+            m.consecutive_all_dones,
+            m.days_inactive,
+            m.last_active_at,
+            m.approved_at,
+            m.joined_at,
+            m.created_at,
+            m.updated_at
+        FROM public.members m
+        WHERE (v_actor.role = 'DEVELOPER' OR m.community_id = v_actor.community_id)
+          AND (p_role IS NULL OR p_role = 'ALL' OR m.role = p_role)
+          AND (p_status IS NULL OR p_status = 'ALL' OR m.status = p_status)
+          AND (
+              v_search_query IS NULL OR
+              LOWER(m.name) LIKE v_search_query OR
+              LOWER(m.member_number) LIKE v_search_query OR
+              LOWER(COALESCE(m.email, '')) LIKE v_search_query OR
+              LOWER(COALESCE(m.facebook_name, '')) LIKE v_search_query
+          )
+        ORDER BY m.joined_at DESC NULLS LAST, m.created_at DESC
+        LIMIT p_page_size OFFSET v_offset
+    ) sub;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'page', p_page,
+        'page_size', p_page_size,
+        'total_count', v_total_count,
+        'total_pages', CEIL(v_total_count::numeric / p_page_size),
+        'members', v_members_json
+    );
+END;
+$$;
+
 -- ====================================================================
 -- CHAPTER 09, 10, 18, 19, 21, 22 — ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================================

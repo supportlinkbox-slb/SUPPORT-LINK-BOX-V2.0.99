@@ -36,7 +36,11 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
     pendingRequiredSupportCount,
     isAllDoneSubmittedToday,
     isLinkSupported,
+    currentThemeConfig,
+    activeFestivalTheme,
   } = useApp();
+
+  const isFestival = currentThemeConfig.id !== 'DEFAULT';
 
   if (!currentUser) return null;
 
@@ -147,16 +151,58 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
       )}
 
       {/* ========================================== */}
+      {/* 🎊 FESTIVAL & SPECIAL DAY THEME CELEBRATION BANNER */}
+      {/* ========================================== */}
+      {isFestival && (
+        <div className={`p-5 sm:p-6 rounded-3xl bg-gradient-to-r ${currentThemeConfig.bannerBg} border-2 shadow-2xl relative overflow-hidden transition-all duration-500 animate-fadeIn`}>
+          <div className="absolute -right-8 -bottom-8 text-8xl opacity-15 select-none pointer-events-none animate-pulse">
+            {currentThemeConfig.icon}
+          </div>
+          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="text-4xl sm:text-5xl select-none animate-bounce shrink-0">
+                {currentThemeConfig.icon}
+              </div>
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-white/10 text-white border border-white/20 mb-1">
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>{currentThemeConfig.badge}</span>
+                </div>
+                <h2 className="text-base sm:text-xl font-black text-white tracking-tight leading-snug">
+                  {activeFestivalTheme.customGreeting || currentThemeConfig.greetingTitle}
+                </h2>
+                <p className="text-xs text-slate-200 mt-1 max-w-xl leading-relaxed">
+                  {activeFestivalTheme.customSubtitle || currentThemeConfig.greetingSubtitle}
+                </p>
+              </div>
+            </div>
+            {activeFestivalTheme.expiresAt && (
+              <div className="shrink-0 px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-[11px] text-slate-300 font-mono flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>লাইভ থিম সক্রিয়</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
       {/* 👤 WELCOME / PROFILE HEADER */}
       {/* ========================================== */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
-        <div className="absolute -right-10 -top-10 w-48 h-48 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+      <div className={`bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 border rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden transition-all duration-300 ${
+        isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80'
+      }`}>
+        <div className={`absolute -right-10 -top-10 w-48 h-48 rounded-full blur-2xl pointer-events-none ${
+          isFestival ? currentThemeConfig.bgGlow : 'bg-cyan-500/10'
+        }`} />
         <div className="flex items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-3.5 sm:gap-4">
             <img
               src={currentUser.profile_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
               alt={currentUser.name}
-              className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover border-2 border-cyan-500/50 shadow-md shadow-cyan-500/20 shrink-0"
+              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover border-2 shadow-md shrink-0 ${
+                isFestival ? 'border-amber-400/80 shadow-amber-500/20' : 'border-cyan-500/50 shadow-cyan-500/20'
+              }`}
             />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -167,6 +213,11 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                   {currentUser.status}
                 </span>
+                {isFestival && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    {currentThemeConfig.badge}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
                 <span>আজকের তারিখ: <strong className="text-cyan-400 font-mono">{todayDate}</strong></span>
@@ -205,12 +256,16 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
       {/* ========================================== */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* CARD 1: আপনার আজকের লিংক নাম্বার */}
-        <div className="bg-slate-900/90 border border-slate-800/80 hover:border-cyan-500/40 rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group">
+        <div className={`bg-slate-900/90 border rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group hover:scale-[1.02] duration-300 ${
+          isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80 hover:border-cyan-500/40'
+        }`}>
           <div className="flex items-start justify-between gap-1">
             <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
               আজকের লিংক
             </span>
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shrink-0">
+            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+              isFestival ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+            }`}>
               <LinkIcon className="w-4 h-4" />
             </div>
           </div>

@@ -22,19 +22,21 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   setCurrentTab,
   onOpenSubmitModal,
 }) => {
-  const { currentUser, pendingRequiredSupportCount, isAllDoneSubmittedToday } = useApp();
+  const { currentUser, pendingRequiredSupportCount, currentThemeConfig } = useApp();
 
-  const canAccessAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'DEVELOPER';
+  const isFestival = currentThemeConfig.id !== 'DEFAULT';
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/80 px-2 pt-1.5 pb-2 shadow-2xl transition-all">
+    <div className={`md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t px-2 pt-1.5 pb-2 shadow-2xl transition-all ${
+      isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80'
+    }`}>
       <div className="grid grid-cols-5 items-center justify-between max-w-md mx-auto">
         {/* Tab 1: Home Dashboard */}
         <button
           onClick={() => setCurrentTab('home')}
           className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-1 rounded-xl transition ${
             currentTab === 'home' || currentTab === 'links'
-              ? 'text-cyan-400 bg-cyan-500/10 font-bold'
+              ? `${currentThemeConfig.accentColor} bg-white/5 font-bold`
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
@@ -66,7 +68,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
         <div className="flex justify-center -mt-5">
           <button
             onClick={onOpenSubmitModal}
-            className="w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/40 border-2 border-slate-900 active:scale-95 transition"
+            className={`w-12 h-12 rounded-full bg-gradient-to-tr ${currentThemeConfig.primaryGradient} text-white flex items-center justify-center shadow-lg border-2 border-slate-900 active:scale-95 transition hover:scale-105`}
             title="লিংক জমা দিন"
           >
             <Plus className="w-6 h-6 stroke-[2.5]" />

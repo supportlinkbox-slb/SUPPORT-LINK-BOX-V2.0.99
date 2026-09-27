@@ -493,6 +493,8 @@ export interface SystemSettings {
   maintenance_mode: boolean;
 }
 
+export * from './festivalTheme';
+
 export interface SystemConfig {
   submission_start_time: string; // "10:00"
   submission_end_time: string; // "16:50"

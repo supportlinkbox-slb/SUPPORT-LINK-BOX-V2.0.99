@@ -24,7 +24,11 @@ import {
   MovieStatus,
   MovieRequest,
   MovieRequestStatus,
+  FestivalThemeType,
+  FestivalThemeConfig,
+  ActiveThemeState,
 } from '../types';
+import { FESTIVAL_THEMES } from '../types/festivalTheme';
 import {
   DEFAULT_SYSTEM_CONFIG,
   SEED_MEMBERS,
@@ -215,6 +219,21 @@ interface AppContextType {
 
   // Members Management
   members: MemberProfile[];
+  fetchPaginatedMembers: (params: {
+    search?: string;
+    role?: UserRole | 'ALL';
+    status?: MemberStatus | 'ALL';
+    page?: number;
+    pageSize?: number;
+  }) => Promise<{
+    success: boolean;
+    members?: MemberProfile[];
+    page?: number;
+    pageSize?: number;
+    totalCount?: number;
+    totalPages?: number;
+    error?: string;
+  }>;
   updateMemberRole: (
     targetId: string,
     newRole: UserRole
@@ -260,6 +279,11 @@ interface AppContextType {
   deleteMovie: (id: string) => Promise<{ success: boolean; error?: string }>;
   submitMovieRequest: (requestData: { movie_title: string; release_year: string; thumbnail_url?: string }) => Promise<{ success: boolean; error?: string; request?: MovieRequest }>;
   updateMovieRequestStatus: (requestId: string, status: MovieRequestStatus, notes?: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Festival Theme System (Admin-Controlled & Time-Bound)
+  activeFestivalTheme: ActiveThemeState;
+  currentThemeConfig: FestivalThemeConfig;
+  setActiveFestivalThemeState: (themeState: ActiveThemeState) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -410,6 +434,77 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [currentSupportLinkIndex, setCurrentSupportLinkIndex] = useState<number>(0);
 
+  // Festival Theme State (Admin Controlled, Auto Expiring)
+  const [activeFestivalTheme, setActiveFestivalTheme] = useState<ActiveThemeState>(() => {
+    const saved = localStorage.getItem('slb_active_festival_theme');
+    if (saved) {
+      try {
+        const parsed: ActiveThemeState = JSON.parse(saved);
+        if (parsed.isActive && parsed.expiresAt) {
+          const isExpired = new Date(parsed.expiresAt).getTime() <= Date.now();
+          if (!isExpired) return parsed;
+        }
+      } catch (e) {
+        console.error('Error parsing festival theme:', e);
+      }
+    }
+    return {
+      themeId: 'DEFAULT',
+      activatedAt: new Date().toISOString(),
+      durationHours: 0,
+      expiresAt: new Date().toISOString(),
+      isActive: false,
+    };
+  });
+
+  const setActiveFestivalThemeState = useCallback((themeState: ActiveThemeState) => {
+    setActiveFestivalTheme(themeState);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('slb_active_festival_theme', JSON.stringify(themeState));
+    }
+    // Cross-user realtime sync via Supabase
+    if (isSupabaseConfigured) {
+      configApi.setActiveFestivalTheme(themeState).catch((err) => {
+        console.error('Failed to sync festival theme to Supabase:', err);
+      });
+    }
+  }, []);
+
+  // Compute active theme config
+  const currentThemeConfig = useMemo<FestivalThemeConfig>(() => {
+    if (!activeFestivalTheme.isActive) return FESTIVAL_THEMES.DEFAULT;
+    if (activeFestivalTheme.expiresAt && new Date(activeFestivalTheme.expiresAt).getTime() <= Date.now()) {
+      return FESTIVAL_THEMES.DEFAULT;
+    }
+    return FESTIVAL_THEMES[activeFestivalTheme.themeId] || FESTIVAL_THEMES.DEFAULT;
+  }, [activeFestivalTheme]);
+
+  // Periodic expiration guard for theme timer
+  useEffect(() => {
+    if (!activeFestivalTheme.isActive || !activeFestivalTheme.expiresAt) return;
+    const checkExpiration = () => {
+      if (new Date(activeFestivalTheme.expiresAt).getTime() <= Date.now()) {
+        setActiveFestivalTheme((prev) => ({
+          ...prev,
+          themeId: 'DEFAULT',
+          isActive: false,
+        }));
+        localStorage.setItem(
+          'slb_active_festival_theme',
+          JSON.stringify({
+            themeId: 'DEFAULT',
+            activatedAt: new Date().toISOString(),
+            durationHours: 0,
+            expiresAt: new Date().toISOString(),
+            isActive: false,
+          })
+        );
+      }
+    };
+    const timer = setInterval(checkExpiration, 30000); // Check every 30s
+    return () => clearInterval(timer);
+  }, [activeFestivalTheme]);
+
   // Sync to local storage when Supabase is NOT configured (Preview Mode)
   useEffect(() => {
     if (isSupabaseConfigured) return;
@@ -470,7 +565,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isSupabaseConfigured) return;
 
     try {
-      const [linksRes, allDoneRes, noticesRes, auditRes, schedRes, pendingReviewsRes, reportsRes] = await Promise.all([
+      const [linksRes, allDoneRes, noticesRes, auditRes, schedRes, pendingReviewsRes, reportsRes, themeRes] = await Promise.all([
         dailyLinksApi.getTodayLinks(todayDate),
         allDoneApi.getTodayAllDone(todayDate),
         configApi.getNotices(),
@@ -478,6 +573,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         scheduledLinksApi.getMyScheduledLinks(),
         allDoneAdminApi.getPendingReviews(),
         reportsApi.fetchReportsPaginated({ page: 1, pageSize: 50 }),
+        configApi.getActiveFestivalTheme(),
       ]);
 
       if (linksRes.success && linksRes.data) setDailyLinks(linksRes.data);
@@ -487,6 +583,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (schedRes.success && schedRes.data) setScheduledLinks(schedRes.data);
       if (pendingReviewsRes.success && pendingReviewsRes.data) setPendingReviews(pendingReviewsRes.data);
       if (reportsRes.success && reportsRes.data?.reports) setReports(reportsRes.data.reports);
+      if (themeRes?.success && themeRes.data) {
+        if (themeRes.data.isActive && themeRes.data.expiresAt) {
+          const isExpired = new Date(themeRes.data.expiresAt).getTime() <= Date.now();
+          if (!isExpired) {
+            setActiveFestivalTheme(themeRes.data);
+            localStorage.setItem('slb_active_festival_theme', JSON.stringify(themeRes.data));
+          }
+        } else if (!themeRes.data.isActive) {
+          setActiveFestivalTheme(themeRes.data);
+          localStorage.setItem('slb_active_festival_theme', JSON.stringify(themeRes.data));
+        }
+      }
 
       const mediaRes = await supabase.from('media_items').select('*').order('created_at', { ascending: false });
       if (mediaRes.data) {
@@ -759,21 +867,72 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'settings' },
+        () => {
+          configApi.getActiveFestivalTheme().then((res) => {
+            if (res.success && res.data) {
+              setActiveFestivalTheme(res.data);
+              localStorage.setItem('slb_active_festival_theme', JSON.stringify(res.data));
+            }
+          });
+        }
+      );
+
+    // Dedicated Realtime Broadcast Channel for Instant (<100ms) Theme Sync Across All Users
+    const themeBroadcastChannel = supabase
+      .channel('global_festival_theme_sync')
+      .on('broadcast', { event: 'theme_update' }, (eventPayload: any) => {
+        if (eventPayload?.payload) {
+          const incomingTheme: ActiveThemeState = eventPayload.payload;
+          setActiveFestivalTheme(incomingTheme);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('slb_active_festival_theme', JSON.stringify(incomingTheme));
+          }
+        }
+      })
       .subscribe();
+
+    channel.subscribe();
 
     return () => {
       authSub.unsubscribe();
       supabase.removeChannel(channel);
+      supabase.removeChannel(themeBroadcastChannel);
     };
   }, [todayDate, refreshData]);
 
-  // Periodic timer for live BDT window status re-evaluation
+  // Optimized timer for live BDT window status re-evaluation
+  // Uses document visibility detection and a gentle 30s interval to prevent CPU/battery drain on mobile
   const [timeTick, setTimeTick] = useState<number>(() => Date.now());
   useEffect(() => {
-    const timer = setInterval(() => {
+    const updateTick = () => {
+      // Avoid triggering re-renders if document is hidden in background tab
+      if (typeof document !== 'undefined' && document.hidden) return;
       setTimeTick(Date.now());
-    }, 5000);
-    return () => clearInterval(timer);
+    };
+
+    // 30 seconds interval is perfectly sufficient for minute-based BDT window checks
+    const timer = setInterval(updateTick, 30000);
+
+    // Immediately update when user switches back to active tab
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        setTimeTick(Date.now());
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
   }, []);
 
   // Window status checks (reacts dynamically to time tick)
@@ -2371,6 +2530,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true };
   };
 
+  const fetchPaginatedMembers = async (params: {
+    search?: string;
+    role?: UserRole | 'ALL';
+    status?: MemberStatus | 'ALL';
+    page?: number;
+    pageSize?: number;
+  }) => {
+    if (isSupabaseConfigured) {
+      const res = await membersApi.getPaginatedMembers(params);
+      if (res.success && res.data) {
+        return {
+          success: true,
+          members: res.data.members,
+          page: res.data.page,
+          pageSize: res.data.pageSize,
+          totalCount: res.data.totalCount,
+          totalPages: res.data.totalPages,
+        };
+      }
+      return { success: false, error: res.error || 'সদস্য তালিকা লোড করতে ব্যর্থ হয়েছে।' };
+    }
+
+    // In-memory fallback if Supabase not configured
+    const searchLower = (params.search || '').toLowerCase().trim();
+    const filtered = members.filter((m) => {
+      const matchesSearch =
+        !searchLower ||
+        m.name.toLowerCase().includes(searchLower) ||
+        m.email.toLowerCase().includes(searchLower) ||
+        m.member_number.toLowerCase().includes(searchLower) ||
+        (m.facebook_name && m.facebook_name.toLowerCase().includes(searchLower));
+
+      const matchesStatus = !params.status || params.status === 'ALL' || m.status === params.status;
+      const matchesRole = !params.role || params.role === 'ALL' || m.role === params.role;
+
+      return matchesSearch && matchesStatus && matchesRole;
+    });
+
+    const page = params.page || 1;
+    const pageSize = params.pageSize || 15;
+    const totalCount = filtered.length;
+    const totalPages = Math.ceil(totalCount / pageSize) || 1;
+    const from = (page - 1) * pageSize;
+    const slice = filtered.slice(from, from + pageSize);
+
+    return {
+      success: true,
+      members: slice,
+      page,
+      pageSize,
+      totalCount,
+      totalPages,
+    };
+  };
+
   const updateMemberProfile = async (
     targetId: string,
     profile: {
@@ -2697,6 +2911,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         verifyFakeAllDone,
         resolvePunishment,
         members,
+        fetchPaginatedMembers,
         updateMemberRole,
         updateMemberStatus,
         approveMember,
@@ -2719,6 +2934,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteMovie,
         submitMovieRequest,
         updateMovieRequestStatus,
+        activeFestivalTheme,
+        currentThemeConfig,
+        setActiveFestivalThemeState,
       }}
     >
       {children}

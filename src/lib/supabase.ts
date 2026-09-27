@@ -20,6 +20,7 @@ import {
   ReportReply,
   LinkReport,
   ReportStatus,
+  ActiveThemeState,
 } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -1148,6 +1149,67 @@ export const configApi = {
         .limit(50);
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data: (data || []) as AuditLog[] };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async getActiveFestivalTheme(): Promise<ApiResponse<ActiveThemeState | null>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: null };
+      const { data, error } = await supabase
+        .from('settings')
+        .select('raw_value')
+        .eq('key', 'active_festival_theme')
+        .maybeSingle();
+
+      if (error) {
+        // Table or key might not exist yet; gracefully fallback
+        return { success: true, data: null };
+      }
+      if (data?.raw_value) {
+        try {
+          const parsed = typeof data.raw_value === 'string' ? JSON.parse(data.raw_value) : data.raw_value;
+          return { success: true, data: parsed as ActiveThemeState };
+        } catch {
+          return { success: true, data: null };
+        }
+      }
+      return { success: true, data: null };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async setActiveFestivalTheme(themeState: ActiveThemeState): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: themeState };
+      
+      // 1. Upsert to settings table for persistent cross-device storage
+      const { error: upsertErr } = await supabase
+        .from('settings')
+        .upsert(
+          {
+            key: 'active_festival_theme',
+            raw_value: JSON.stringify(themeState),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        );
+
+      if (upsertErr) {
+        console.warn('Could not persist theme to settings table:', upsertErr.message);
+      }
+
+      // 2. Broadcast via Supabase Realtime Channel to all live connected users instantly
+      const themeChannel = supabase.channel('global_festival_theme_sync');
+      await themeChannel.send({
+        type: 'broadcast',
+        event: 'theme_update',
+        payload: themeState,
+      });
+
+      return { success: true, data: themeState };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }

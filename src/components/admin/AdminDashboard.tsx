@@ -19,6 +19,7 @@ import {
   UserX,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   Filter,
   Eye,
   Info,
@@ -27,6 +28,7 @@ import {
   Film,
   Bell,
   PlusCircle,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MemberProfile, UserRole, MemberStatus } from '../../types';
@@ -39,6 +41,7 @@ import { AdminSettingsPanel } from './AdminSettingsPanel';
 import { MovieLoverAdmin } from './MovieLoverAdmin';
 import { AdminNoticeGeneratorModal } from './AdminNoticeGeneratorModal';
 import { LinkSubmissionModal } from '../member/LinkSubmissionModal';
+import { FestivalThemeManagerModal } from './FestivalThemeManagerModal';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -49,6 +52,7 @@ export const AdminDashboard: React.FC = () => {
     allDoneRecords,
     auditLogs,
     refreshData,
+    fetchPaginatedMembers,
     approveMember,
     rejectMember,
     updateMemberRole,
@@ -63,31 +67,66 @@ export const AdminDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
 
+  // Server-side Pagination & Search State for Members (Scales seamlessly up to 10,000+ members)
+  const [memberPage, setMemberPage] = useState<number>(1);
+  const [memberPageSize] = useState<number>(15);
+  const [paginatedMembers, setPaginatedMembers] = useState<MemberProfile[]>([]);
+  const [memberTotalCount, setMemberTotalCount] = useState<number>(0);
+  const [memberTotalPages, setMemberTotalPages] = useState<number>(1);
+  const [isMemberLoading, setIsMemberLoading] = useState<boolean>(false);
+
   // Modals state
   const [selectedMember, setSelectedMember] = useState<MemberProfile | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [confirmModalState, setConfirmModalState] = useState<ActionModalState | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [isNoticeGeneratorOpen, setIsNoticeGeneratorOpen] = useState(false);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [submitLinkTargetMemberId, setSubmitLinkTargetMemberId] = useState<string | null>(null);
 
   const pendingMembers = useMemo(() => {
     return members.filter((m) => m.status === 'PENDING');
   }, [members]);
 
-  const filteredMembers = useMemo(() => {
-    return members.filter((m) => {
-      const matchesSearch =
-        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.member_number.toLowerCase().includes(searchQuery.toLowerCase());
+  // Load paginated members from server with debounce on search
+  useEffect(() => {
+    let isCurrent = true;
+    const loadMembers = async () => {
+      setIsMemberLoading(true);
+      try {
+        const res = await fetchPaginatedMembers({
+          search: searchQuery,
+          role: roleFilter as any,
+          status: statusFilter as any,
+          page: memberPage,
+          pageSize: memberPageSize,
+        });
+        if (isCurrent && res.success && res.members) {
+          setPaginatedMembers(res.members);
+          setMemberTotalCount(res.totalCount || 0);
+          setMemberTotalPages(res.totalPages || 1);
+        }
+      } catch (err) {
+        console.error('Failed to load paginated members:', err);
+      } finally {
+        if (isCurrent) setIsMemberLoading(false);
+      }
+    };
 
-      const matchesStatus = statusFilter === 'ALL' || m.status === statusFilter;
-      const matchesRole = roleFilter === 'ALL' || m.role === roleFilter;
+    const timer = setTimeout(() => {
+      loadMembers();
+    }, 250);
 
-      return matchesSearch && matchesStatus && matchesRole;
-    });
-  }, [members, searchQuery, statusFilter, roleFilter]);
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, statusFilter, roleFilter, memberPage, memberPageSize, fetchPaginatedMembers, members]);
+
+  // Reset page to 1 when filters or search change
+  useEffect(() => {
+    setMemberPage(1);
+  }, [searchQuery, statusFilter, roleFilter]);
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -190,6 +229,14 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setIsThemeModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-rose-500/20 hover:from-amber-500 hover:to-orange-500 text-amber-300 hover:text-slate-950 text-xs font-bold rounded-xl border border-amber-500/40 transition shadow-sm cursor-pointer"
+            title="উৎসব ও বিশেষ দিবস থিম সেটিংস"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>উৎসব থিম</span>
+          </button>
           <button
             onClick={() => setIsNoticeGeneratorOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 text-xs font-bold rounded-xl border border-amber-500/30 transition shadow-sm cursor-pointer"
@@ -578,7 +625,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           {/* Members Table / Cards */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950/60 text-slate-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
@@ -592,89 +639,142 @@ export const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredMembers.map((member) => (
-                    <tr key={member.id} className="hover:bg-slate-800/40 transition">
-                      <td className="p-3.5">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={member.profile_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
-                            alt={member.name}
-                            referrerPolicy="no-referrer"
-                            className="w-9 h-9 rounded-xl object-cover border border-slate-700 shrink-0"
-                          />
-                          <div>
-                            <div className="font-bold text-slate-100 flex items-center gap-1.5">
-                              <span>{member.name}</span>
-                              <span className="text-[10px] font-mono text-cyan-400 font-normal">
-                                ({member.member_number})
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-slate-500 font-mono">
-                              {member.email}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3.5">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            member.role === 'DEVELOPER'
-                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                              : member.role === 'ADMIN'
-                              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                              : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {member.role}
-                        </span>
-                      </td>
-                      <td className="p-3.5">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            member.status === 'ACTIVE'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : member.status === 'PENDING'
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                              : member.status === 'REJECTED'
-                              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                          }`}
-                        >
-                          {member.status}
-                        </span>
-                      </td>
-                      <td className="p-3.5 font-bold text-slate-200">
-                        {member.points} pts
-                      </td>
-                      <td className="p-3.5 text-slate-400 text-[11px]">
-                        {member.joined_at ? formatToBDT(member.joined_at).split(',')[0] : 'N/A'}
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {member.status === 'ACTIVE' && (
-                            <button
-                              onClick={() => setSubmitLinkTargetMemberId(member.id)}
-                              className="px-2.5 py-1.5 bg-purple-950/60 hover:bg-purple-900 text-purple-300 text-xs font-bold rounded-lg border border-purple-800/60 transition"
-                              title="সদস্যের পক্ষে লিংক জমা দিন"
-                            >
-                              লিংক জমা
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              setSelectedMember(member);
-                              setIsDetailsOpen(true);
-                            }}
-                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition"
-                          >
-                            ম্যানেজ
-                          </button>
+                  {isMemberLoading ? (
+                    <tr>
+                      <td colSpan={6} className="p-10 text-center text-slate-500">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                          <span>সার্ভার থেকে সদস্য তালিকা লোড হচ্ছে...</span>
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ) : paginatedMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-10 text-center text-slate-500">
+                        কোনো সদস্যের রেকর্ড পাওয়া যায়নি।
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedMembers.map((member) => (
+                      <tr key={member.id} className="hover:bg-slate-800/40 transition">
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={member.profile_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                              alt={member.name}
+                              referrerPolicy="no-referrer"
+                              className="w-9 h-9 rounded-xl object-cover border border-slate-700 shrink-0"
+                            />
+                            <div>
+                              <div className="font-bold text-slate-100 flex items-center gap-1.5">
+                                <span>{member.name}</span>
+                                <span className="text-[10px] font-mono text-cyan-400 font-normal">
+                                  ({member.member_number})
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                {member.email}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              member.role === 'DEVELOPER'
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                : member.role === 'ADMIN'
+                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {member.role}
+                          </span>
+                        </td>
+                        <td className="p-3.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              member.status === 'ACTIVE'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : member.status === 'PENDING'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : member.status === 'REJECTED'
+                                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            }`}
+                          >
+                            {member.status}
+                          </span>
+                        </td>
+                        <td className="p-3.5 font-bold text-slate-200">
+                          {member.points} pts
+                        </td>
+                        <td className="p-3.5 text-slate-400 text-[11px]">
+                          {member.joined_at ? formatToBDT(member.joined_at).split(',')[0] : 'N/A'}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {member.status === 'ACTIVE' && (
+                              <button
+                                onClick={() => setSubmitLinkTargetMemberId(member.id)}
+                                className="px-2.5 py-1.5 bg-purple-950/60 hover:bg-purple-900 text-purple-300 text-xs font-bold rounded-lg border border-purple-800/60 transition"
+                                title="সদস্যের পক্ষে লিংক জমা দিন"
+                              >
+                                লিংক জমা
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setSelectedMember(member);
+                                setIsDetailsOpen(true);
+                              }}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition"
+                            >
+                              ম্যানেজ
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Server-Side Pagination Footer */}
+            <div className="p-3.5 bg-slate-950/40 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <span>
+                  মোট সদস্য: <strong className="text-white font-mono">{memberTotalCount}</strong> জন
+                </span>
+                <span className="text-slate-600">|</span>
+                <span>
+                  পৃষ্ঠা: <strong className="text-cyan-400 font-mono">{memberPage}</strong> /{' '}
+                  <span className="font-mono">{memberTotalPages}</span>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMemberPage((prev) => Math.max(1, prev - 1))}
+                  disabled={memberPage <= 1 || isMemberLoading}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-40 disabled:hover:bg-slate-800 transition flex items-center gap-1 font-bold"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>পূর্ববর্তী</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMemberPage((prev) => Math.min(memberTotalPages, prev + 1))}
+                  disabled={memberPage >= memberTotalPages || isMemberLoading}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-40 disabled:hover:bg-slate-800 transition flex items-center gap-1 font-bold"
+                >
+                  <span>পরবর্তী</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -928,6 +1028,14 @@ export const AdminDashboard: React.FC = () => {
         <AdminNoticeGeneratorModal
           isOpen={isNoticeGeneratorOpen}
           onClose={() => setIsNoticeGeneratorOpen(false)}
+        />
+      )}
+
+      {/* Admin Festival Theme Manager Modal */}
+      {isThemeModalOpen && (
+        <FestivalThemeManagerModal
+          isOpen={isThemeModalOpen}
+          onClose={() => setIsThemeModalOpen(false)}
         />
       )}
 
