@@ -21,10 +21,12 @@ import {
   Calendar,
   Layers,
   Sparkles,
+  Bell,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SystemSettings, AdminSupportContact } from '../../types';
 import { SystemResetModal } from './SystemResetModal';
+import { AdminNoticeGeneratorModal } from './AdminNoticeGeneratorModal';
 
 type SettingSectionTab = 'schedule' | 'rules' | 'contact' | 'recovery' | 'backup' | 'security';
 
@@ -69,6 +71,7 @@ export const AdminSettingsPanel: React.FC = () => {
   const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [selectedInactivityDays, setSelectedInactivityDays] = useState<3 | 7>(3);
+  const [isNoticeGeneratorOpen, setIsNoticeGeneratorOpen] = useState(false);
 
   // Filter inactive members for Recovery Duty Manager
   const inactiveMembers = members.filter((m) => {
@@ -429,7 +432,15 @@ export const AdminSettingsPanel: React.FC = () => {
                   <p className="text-xs text-slate-400">৩ দিন ও ৭ দিন নিষ্ক্রিয় মেম্বার পেনাল্টি অ্যাসাইনার</p>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsNoticeGeneratorOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold transition flex items-center gap-1.5"
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    <span>নোটিশ জেনারেটর</span>
+                  </button>
                   <button
                     onClick={() => setSelectedInactivityDays(3)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
@@ -548,6 +559,14 @@ export const AdminSettingsPanel: React.FC = () => {
 
       {/* Reset Modal */}
       {isResetModalOpen && <SystemResetModal onClose={() => setIsResetModalOpen(false)} />}
+
+      {/* Admin Notice Generator Modal */}
+      {isNoticeGeneratorOpen && (
+        <AdminNoticeGeneratorModal
+          isOpen={isNoticeGeneratorOpen}
+          onClose={() => setIsNoticeGeneratorOpen(false)}
+        />
+      )}
     </div>
   );
 };

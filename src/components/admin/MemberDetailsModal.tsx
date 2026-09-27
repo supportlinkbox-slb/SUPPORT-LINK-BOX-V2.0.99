@@ -33,6 +33,7 @@ interface MemberDetailsModalProps {
   onRequestStatusChange: (member: MemberProfile, newStatus: MemberStatus) => void;
   onRequestApprove: (member: MemberProfile) => void;
   onRequestReject: (member: MemberProfile) => void;
+  onRequestSubmitLink?: (member: MemberProfile) => void;
 }
 
 export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
@@ -44,6 +45,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   onRequestStatusChange,
   onRequestApprove,
   onRequestReject,
+  onRequestSubmitLink,
 }) => {
   const { updateMemberProfile, auditLogs, dailyLinks, allDoneRecords, punishments } = useApp();
 
@@ -354,6 +356,16 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
                     {/* Status Management */}
                     {isActive && (
                       <>
+                        {onRequestSubmitLink && (
+                          <button
+                            type="button"
+                            onClick={() => onRequestSubmitLink(member)}
+                            className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                          >
+                            <LinkIcon className="w-3.5 h-3.5" />
+                            <span>লিংক জমা দিন (Submit Link)</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => onRequestStatusChange(member, 'FROZEN')}

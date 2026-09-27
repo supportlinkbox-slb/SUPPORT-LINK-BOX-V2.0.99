@@ -25,6 +25,8 @@ import {
   UserPlus,
   Settings,
   Film,
+  Bell,
+  PlusCircle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MemberProfile, UserRole, MemberStatus } from '../../types';
@@ -35,6 +37,8 @@ import { AdminInviteMember } from './AdminInviteMember';
 import { AdminInviteList } from './AdminInviteList';
 import { AdminSettingsPanel } from './AdminSettingsPanel';
 import { MovieLoverAdmin } from './MovieLoverAdmin';
+import { AdminNoticeGeneratorModal } from './AdminNoticeGeneratorModal';
+import { LinkSubmissionModal } from '../member/LinkSubmissionModal';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -64,6 +68,8 @@ export const AdminDashboard: React.FC = () => {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [confirmModalState, setConfirmModalState] = useState<ActionModalState | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [isNoticeGeneratorOpen, setIsNoticeGeneratorOpen] = useState(false);
+  const [submitLinkTargetMemberId, setSubmitLinkTargetMemberId] = useState<string | null>(null);
 
   const pendingMembers = useMemo(() => {
     return members.filter((m) => m.status === 'PENDING');
@@ -184,6 +190,13 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setIsNoticeGeneratorOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 text-xs font-bold rounded-xl border border-amber-500/30 transition shadow-sm cursor-pointer"
+          >
+            <Bell className="w-3.5 h-3.5" />
+            <span>নোটিশ জেনারেটর</span>
+          </button>
           <button
             onClick={handleRefresh}
             disabled={loading}
@@ -637,15 +650,26 @@ export const AdminDashboard: React.FC = () => {
                         {member.joined_at ? formatToBDT(member.joined_at).split(',')[0] : 'N/A'}
                       </td>
                       <td className="p-3.5 text-right">
-                        <button
-                          onClick={() => {
-                            setSelectedMember(member);
-                            setIsDetailsOpen(true);
-                          }}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition"
-                        >
-                          ম্যানেজ
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {member.status === 'ACTIVE' && (
+                            <button
+                              onClick={() => setSubmitLinkTargetMemberId(member.id)}
+                              className="px-2.5 py-1.5 bg-purple-950/60 hover:bg-purple-900 text-purple-300 text-xs font-bold rounded-lg border border-purple-800/60 transition"
+                              title="সদস্যের পক্ষে লিংক জমা দিন"
+                            >
+                              লিংক জমা
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setSelectedMember(member);
+                              setIsDetailsOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition"
+                          >
+                            ম্যানেজ
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -725,6 +749,13 @@ export const AdminDashboard: React.FC = () => {
               </h3>
               <p className="text-xs text-slate-400">সকলের জমা দেওয়া লিংকের তালিকা, এডিট, ডিলিট ও অ্যাডমিন অ্যাকশন।</p>
             </div>
+            <button
+              onClick={() => setSubmitLinkTargetMemberId(currentUser?.id || '')}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-500/20 cursor-pointer self-start sm:self-auto"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>লিংক জমা দিন (Admin / Member)</span>
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -874,6 +905,11 @@ export const AdminDashboard: React.FC = () => {
           onRequestStatusChange={openStatusChangeConfirm}
           onRequestApprove={openApproveConfirm}
           onRequestReject={openRejectConfirm}
+          onRequestSubmitLink={(m) => {
+            setIsDetailsOpen(false);
+            setSelectedMember(null);
+            setSubmitLinkTargetMemberId(m.id);
+          }}
         />
       )}
 
@@ -884,6 +920,23 @@ export const AdminDashboard: React.FC = () => {
           onClose={() => setConfirmModalState(null)}
           onConfirm={handleExecuteModalConfirm}
           isProcessing={isProcessingAction}
+        />
+      )}
+
+      {/* Admin Inactivity Notice Generator Modal */}
+      {isNoticeGeneratorOpen && (
+        <AdminNoticeGeneratorModal
+          isOpen={isNoticeGeneratorOpen}
+          onClose={() => setIsNoticeGeneratorOpen(false)}
+        />
+      )}
+
+      {/* Admin On-Behalf Link Submission Modal */}
+      {submitLinkTargetMemberId !== null && (
+        <LinkSubmissionModal
+          isOpen={submitLinkTargetMemberId !== null}
+          onClose={() => setSubmitLinkTargetMemberId(null)}
+          defaultTargetMemberId={submitLinkTargetMemberId || undefined}
         />
       )}
     </div>

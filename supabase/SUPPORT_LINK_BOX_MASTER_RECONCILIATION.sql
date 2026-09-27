@@ -910,7 +910,7 @@ CREATE TRIGGER trg_protect_developer_role
     FOR EACH ROW EXECUTE FUNCTION public.protect_developer_role_trigger();
 
 -- ====================================================================
--- SECTION 09 — ROW LEVEL SECURITY (RLS) POLICIES
+-- SECTION 09 — ROW LEVEL SECURITY (RLS) POLICIES (STRICT STATUS CHECKED)
 -- ====================================================================
 
 ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
@@ -923,81 +923,167 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.movies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.movie_requests ENABLE ROW LEVEL SECURITY;
 
--- 1. Members RLS
+-- 1. Members RLS: Own profile viewable always; Directory viewable ONLY by ACTIVE members or Admin/Developer
 DROP POLICY IF EXISTS "members_select_policy" ON public.members;
-CREATE POLICY "members_select_policy" ON public.members
-    FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Authenticated members read" ON public.members;
+DROP POLICY IF EXISTS "Active members view directory" ON public.members;
+CREATE POLICY "Active members view directory" ON public.members
+    FOR SELECT TO authenticated
+    USING (
+        auth.uid() = auth_user_id
+        OR EXISTS (
+            SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+        )
+        OR public.is_admin()
+    );
 
 DROP POLICY IF EXISTS "members_update_policy" ON public.members;
-CREATE POLICY "members_update_policy" ON public.members
-    FOR UPDATE USING (
-        auth.uid() = auth_user_id OR public.is_admin()
+DROP POLICY IF EXISTS "Active members update self or admin" ON public.members;
+CREATE POLICY "Active members update self or admin" ON public.members
+    FOR UPDATE TO authenticated
+    USING (
+        (auth.uid() = auth_user_id AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'))
+        OR public.is_admin()
+    )
+    WITH CHECK (
+        (auth.uid() = auth_user_id AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'))
+        OR public.is_admin()
     );
 
--- 2. Daily Links RLS
+-- 2. Daily Links RLS: Only ACTIVE members or Admin/Dev can view/insert
 DROP POLICY IF EXISTS "daily_links_select_policy" ON public.daily_links;
-CREATE POLICY "daily_links_select_policy" ON public.daily_links
-    FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Authenticated view daily links" ON public.daily_links;
+DROP POLICY IF EXISTS "Active members view daily links" ON public.daily_links;
+CREATE POLICY "Active members view daily links" ON public.daily_links
+    FOR SELECT TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+        )
+        OR public.is_admin()
+    );
 
 DROP POLICY IF EXISTS "daily_links_insert_policy" ON public.daily_links;
-CREATE POLICY "daily_links_insert_policy" ON public.daily_links
-    FOR INSERT WITH CHECK (
-        public.get_current_member_id() = owner_id OR public.is_admin()
+DROP POLICY IF EXISTS "Active members insert daily link" ON public.daily_links;
+CREATE POLICY "Active members insert daily link" ON public.daily_links
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        (
+            public.get_current_member_id() = owner_id 
+            AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE')
+        )
+        OR public.is_admin()
     );
 
--- 3. Support Records RLS
-DROP POLICY IF EXISTS "support_records_select_policy" ON public.support_records;
-CREATE POLICY "support_records_select_policy" ON public.support_records
-    FOR SELECT USING (true);
+DROP POLICY IF EXISTS "daily_links_update_policy" ON public.daily_links;
+DROP POLICY IF EXISTS "Active members update daily link" ON public.daily_links;
+CREATE POLICY "Active members update daily link" ON public.daily_links
+    FOR UPDATE TO authenticated
+    USING (
+        (
+            public.get_current_member_id() = owner_id 
+            AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE')
+        )
+        OR public.is_admin()
+    );
 
--- 4. All Done RLS
+-- 3. Support Records RLS: Only ACTIVE members or Admin/Dev
+DROP POLICY IF EXISTS "support_records_select_policy" ON public.support_records;
+DROP POLICY IF EXISTS "Authenticated view support records" ON public.support_records;
+DROP POLICY IF EXISTS "Active members view support records" ON public.support_records;
+CREATE POLICY "Active members view support records" ON public.support_records
+    FOR SELECT TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+        )
+        OR public.is_admin()
+    );
+
+DROP POLICY IF EXISTS "support_records_insert_policy" ON public.support_records;
+DROP POLICY IF EXISTS "Active supporters insert support record" ON public.support_records;
+CREATE POLICY "Active supporters insert support record" ON public.support_records
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        public.get_current_member_id() = supporter_id
+        AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE')
+    );
+
+-- 4. All Done RLS: Only ACTIVE members or Admin/Dev
 DROP POLICY IF EXISTS "all_done_select_policy" ON public.all_done;
-CREATE POLICY "all_done_select_policy" ON public.all_done
-    FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Authenticated view all done" ON public.all_done;
+DROP POLICY IF EXISTS "Active members view all done" ON public.all_done;
+CREATE POLICY "Active members view all done" ON public.all_done
+    FOR SELECT TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'
+        )
+        OR public.is_admin()
+    );
+
+DROP POLICY IF EXISTS "all_done_insert_policy" ON public.all_done;
+DROP POLICY IF EXISTS "Active members insert all done" ON public.all_done;
+CREATE POLICY "Active members insert all done" ON public.all_done
+    FOR INSERT TO authenticated
+    WITH CHECK (
+        public.get_current_member_id() = member_id
+        AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE')
+    );
 
 -- 5. Notifications RLS
 DROP POLICY IF EXISTS "notifications_select_policy" ON public.notifications;
-CREATE POLICY "notifications_select_policy" ON public.notifications
-    FOR SELECT USING (
+DROP POLICY IF EXISTS "Members view own notifications" ON public.notifications;
+CREATE POLICY "Members view own notifications" ON public.notifications
+    FOR SELECT TO authenticated
+    USING (
         public.get_current_member_id() = member_id OR public.is_admin()
     );
 
 -- 6. Movie Lover RLS (3-Layer Secured)
 DROP POLICY IF EXISTS "movies_select_policy" ON public.movies;
-CREATE POLICY "movies_select_policy" ON public.movies
-    FOR SELECT USING (
-        status = 'Published' OR public.is_admin()
+DROP POLICY IF EXISTS "Active members view movies" ON public.movies;
+CREATE POLICY "Active members view movies" ON public.movies
+    FOR SELECT TO authenticated
+    USING (
+        (status = 'Published' AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'))
+        OR public.is_admin()
     );
 
 DROP POLICY IF EXISTS "movies_insert_policy" ON public.movies;
 CREATE POLICY "movies_insert_policy" ON public.movies
-    FOR INSERT WITH CHECK (
+    FOR INSERT TO authenticated WITH CHECK (
         public.is_admin()
     );
 
 DROP POLICY IF EXISTS "movies_update_policy" ON public.movies;
 CREATE POLICY "movies_update_policy" ON public.movies
-    FOR UPDATE USING (
+    FOR UPDATE TO authenticated USING (
         public.is_admin()
     );
 
 DROP POLICY IF EXISTS "movies_delete_policy" ON public.movies;
 CREATE POLICY "movies_delete_policy" ON public.movies
-    FOR DELETE USING (
+    FOR DELETE TO authenticated USING (
         public.is_admin()
     );
 
 -- Movie Requests RLS
 DROP POLICY IF EXISTS "movie_requests_select_policy" ON public.movie_requests;
-CREATE POLICY "movie_requests_select_policy" ON public.movie_requests
-    FOR SELECT USING (
-        public.get_current_member_id() = member_id OR public.is_admin()
+DROP POLICY IF EXISTS "Active members view movie requests" ON public.movie_requests;
+CREATE POLICY "Active members view movie requests" ON public.movie_requests
+    FOR SELECT TO authenticated
+    USING (
+        (public.get_current_member_id() = member_id AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE'))
+        OR public.is_admin()
     );
 
 DROP POLICY IF EXISTS "movie_requests_insert_policy" ON public.movie_requests;
-CREATE POLICY "movie_requests_insert_policy" ON public.movie_requests
-    FOR INSERT WITH CHECK (
+DROP POLICY IF EXISTS "Active members insert movie request" ON public.movie_requests;
+CREATE POLICY "Active members insert movie request" ON public.movie_requests
+    FOR INSERT TO authenticated WITH CHECK (
         public.get_current_member_id() = member_id
+        AND EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND status = 'ACTIVE')
     );
 
 -- ====================================================================
