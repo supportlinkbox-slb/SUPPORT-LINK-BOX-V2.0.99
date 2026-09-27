@@ -7,23 +7,25 @@
 export const BDT_TIMEZONE = 'Asia/Dhaka';
 
 /**
- * Returns current Date object represented in Bangladesh Time (UTC+6)
+ * Returns current Date object represented in Bangladesh Time (Asia/Dhaka)
  */
 export function getBangladeshNow(): Date {
-  const now = new Date();
-  // Compute UTC timestamp then add 6 hours for BDT
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  return new Date(utc + 3600000 * 6);
+  const str = new Date().toLocaleString('en-US', { timeZone: BDT_TIMEZONE });
+  return new Date(str);
 }
 
 /**
  * Returns today's date in YYYY-MM-DD format based on Bangladesh Time
  */
 export function getBangladeshDateString(date = getBangladeshNow()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: BDT_TIMEZONE }).format(date);
+  } catch {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
 }
 
 /**

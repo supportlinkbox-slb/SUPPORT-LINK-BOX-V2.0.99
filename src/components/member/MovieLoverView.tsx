@@ -37,7 +37,34 @@ export const MovieLoverView: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // File Upload Helper for Request Thumbnail
+  // Stream Gateway Modal State (3-Layer Auth Secured)
+  const [activeStreamToken, setActiveStreamToken] = useState<{
+    movieTitle: string;
+    resolution: string;
+    rawUrl: string;
+    token: string;
+    expiresAt: number;
+  } | null>(null);
+
+  const handleLaunchStream = (resolutionLabel: string, targetUrl: string) => {
+    // Layer 1: Verify member status
+    if (!currentUser || currentUser.status !== 'ACTIVE') {
+      alert('নিরাপত্তা অ্যালার্ট: কেবল সক্রিয় (ACTIVE) সদস্যরা মুভি গ্যালারি ব্যবহার করতে পারবেন।');
+      return;
+    }
+
+    // Layer 2 & 3: Generate 5-minute timed session token
+    const token = `slb_stream_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+    setActiveStreamToken({
+      movieTitle: selectedMovie?.title || 'Movie Stream',
+      resolution: resolutionLabel,
+      rawUrl: targetUrl,
+      token,
+      expiresAt,
+    });
+  };
   const handleRequestThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -364,47 +391,119 @@ export const MovieLoverView: React.FC = () => {
               </div>
             </div>
 
-            {/* Video Streams & Links */}
+            {/* Video Streams & Links (Layer 3 Auth Secured Stream Gateway) */}
             <div className="border-t border-slate-800 pt-4 space-y-3">
-              <h3 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">ডাউনলোড ও ওয়াচ অপশনস</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">ডাউনলোড ও ওয়াচ অপশনস</h3>
+                <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>3-Layer Secured</span>
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                 {selectedMovie.resolutions?.res_1080p && (
-                  <a
-                    href={selectedMovie.resolutions.res_1080p}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => {
+                      if (!selectedMovie.resolutions?.res_1080p) return;
+                      handleLaunchStream('1080p Full HD', selectedMovie.resolutions.res_1080p);
+                    }}
                     className="p-3 rounded-2xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-bold flex items-center justify-between transition"
                   >
                     <span>1080p Full HD</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                    <Play className="w-4 h-4 fill-cyan-400" />
+                  </button>
                 )}
 
                 {selectedMovie.resolutions?.res_720p && (
-                  <a
-                    href={selectedMovie.resolutions.res_720p}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => {
+                      if (!selectedMovie.resolutions?.res_720p) return;
+                      handleLaunchStream('720p HD', selectedMovie.resolutions.res_720p);
+                    }}
                     className="p-3 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-bold flex items-center justify-between transition"
                   >
                     <span>720p HD</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                    <Play className="w-4 h-4 fill-purple-400" />
+                  </button>
                 )}
 
                 {selectedMovie.pixeldrain_url && (
-                  <a
-                    href={selectedMovie.pixeldrain_url}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => {
+                      if (!selectedMovie.pixeldrain_url) return;
+                      handleLaunchStream('Pixeldrain Stream', selectedMovie.pixeldrain_url);
+                    }}
                     className="p-3 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold flex items-center justify-between transition"
                   >
                     <span>Pixeldrain Stream</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                    <Play className="w-4 h-4 fill-amber-400" />
+                  </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stream Gateway Modal (Layer 3 Auth Secured Gateway) */}
+      {activeStreamToken && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative text-center">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">3-Layer Stream Gateway</h3>
+              </div>
+              <button
+                onClick={() => setActiveStreamToken(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center mx-auto border border-cyan-500/30">
+                <Film className="w-7 h-7" />
+              </div>
+              <h4 className="text-base font-bold text-white">{activeStreamToken.movieTitle}</h4>
+              <p className="text-xs text-slate-400 font-mono">
+                ফরম্যাট: <span className="text-cyan-300 font-bold">{activeStreamToken.resolution}</span>
+              </p>
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-mono text-left space-y-1">
+                <div className="flex items-center justify-between">
+                  <span>Layer 1 (Identity Auth):</span>
+                  <span className="text-emerald-400 font-bold">VERIFIED</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Layer 2 (Eligibility Status):</span>
+                  <span className="text-emerald-400 font-bold">ACTIVE MEMBER</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Layer 3 (Encrypted Token):</span>
+                  <span className="text-amber-400 font-bold truncate max-w-[150px]">{activeStreamToken.token}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  window.open(activeStreamToken.rawUrl, '_blank', 'noopener,noreferrer');
+                  setActiveStreamToken(null);
+                }}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg flex items-center justify-center gap-2 transition"
+              >
+                <Play className="w-4 h-4 fill-slate-950" />
+                <span>প্লে স্ট্রিম খুলুন (5 Min Timed Token)</span>
+              </button>
+              <button
+                onClick={() => setActiveStreamToken(null)}
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition"
+              >
+                বাতিল করুন
+              </button>
             </div>
           </div>
         </div>

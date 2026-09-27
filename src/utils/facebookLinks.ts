@@ -144,11 +144,29 @@ export function validateAndExtractFacebookProfile(rawUrl: string): FacebookProfi
 
 /**
  * Opens Facebook link externally.
- * Respects user workflow: "Do NOT replace the Facebook app workflow with an in-site Facebook viewer."
- * Opens cleanly in browser / external Facebook app.
+ * Mode 'APP': Uses deep-link schema fb://facewebmodal to launch Facebook Android/iOS app.
+ * Mode 'WEB': Uses standard browser window.open.
  */
-export function openFacebookPostExternally(url: string): Window | null {
+export function openFacebookPostExternally(url: string, mode: 'APP' | 'WEB' = 'APP'): Window | null {
   const normalized = normalizeFacebookUrl(url);
   if (!normalized) return null;
+
+  if (mode === 'APP') {
+    // Generate fb:// deep link format for Facebook App
+    const deepLinkUrl = normalized.replace(
+      /^https?:\/\/(www\.|m\.|mobile\.|web\.)?facebook\.com\//i,
+      'fb://facewebmodal/f?href=https://facebook.com/'
+    );
+
+    try {
+      // Attempt location jump for native app handler
+      window.location.href = deepLinkUrl;
+      return null;
+    } catch {
+      // Fallback to standard web open if deep link fails
+      return window.open(normalized, '_blank', 'noopener,noreferrer');
+    }
+  }
+
   return window.open(normalized, '_blank', 'noopener,noreferrer');
 }

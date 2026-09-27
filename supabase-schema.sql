@@ -1332,16 +1332,14 @@ BEGIN
     END IF;
 
     IF NEW.role IS DISTINCT FROM OLD.role THEN
-        IF current_setting('slb.internal_role_change', true) IS DISTINCT FROM 'true' 
-           AND LOWER(COALESCE(NEW.email, '')) NOT IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
+        IF current_setting('slb.internal_role_change', true) IS DISTINCT FROM 'true' THEN
             RAISE EXCEPTION 'SECURITY_VIOLATION: Direct role update is prohibited. Use change_member_role() RPC.';
         END IF;
     END IF;
 
     IF NEW.status IS DISTINCT FROM OLD.status THEN
         IF current_setting('slb.internal_status_change', true) IS DISTINCT FROM 'true'
-           AND current_setting('slb.internal_approval', true) IS DISTINCT FROM 'true'
-           AND LOWER(COALESCE(NEW.email, '')) NOT IN ('muradshihab516@gmail.com', 'supportlinkbox@gmail.com') THEN
+           AND current_setting('slb.internal_approval', true) IS DISTINCT FROM 'true' THEN
             RAISE EXCEPTION 'SECURITY_VIOLATION: Direct status update is prohibited. Use set_member_status_secure() RPC.';
         END IF;
     END IF;

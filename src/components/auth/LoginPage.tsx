@@ -305,6 +305,8 @@ export const LoginPage: React.FC = () => {
 
       // Force instant signout after registration to ensure non-active users cannot bypass approval
       await supabase.auth.signOut();
+      localStorage.removeItem('sb-' + (import.meta.env.VITE_SUPABASE_PROJECT_ID || '') + '-auth-token');
+      sessionStorage.clear();
 
       setPassword('');
       setConfirmPassword('');

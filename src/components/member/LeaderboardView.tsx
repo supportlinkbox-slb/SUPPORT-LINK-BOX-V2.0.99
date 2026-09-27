@@ -28,14 +28,38 @@ export const LeaderboardView: React.FC = () => {
     }
 
     if (period === 'DAILY') {
-      return list.sort((a, b) => (b.daily_points ?? 0) - (a.daily_points ?? 0) || b.points - a.points);
+      return list.sort((a, b) => {
+        const ptsDiff = (b.daily_points ?? 0) - (a.daily_points ?? 0);
+        if (ptsDiff !== 0) return ptsDiff;
+        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
+        if (linksDiff !== 0) return linksDiff;
+        return (b.total_all_done || 0) - (a.total_all_done || 0);
+      });
     } else if (period === 'WEEKLY' || period === 'HISTORICAL') {
-      return list.sort((a, b) => b.weekly_points - a.weekly_points || b.points - a.points);
+      return list.sort((a, b) => {
+        const ptsDiff = (b.weekly_points || 0) - (a.weekly_points || 0);
+        if (ptsDiff !== 0) return ptsDiff;
+        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
+        if (linksDiff !== 0) return linksDiff;
+        return (b.total_all_done || 0) - (a.total_all_done || 0);
+      });
     } else if (period === 'MONTHLY') {
-      return list.sort((a, b) => (b.monthly_points ?? b.points) - (a.monthly_points ?? a.points));
+      return list.sort((a, b) => {
+        const ptsDiff = (b.monthly_points ?? b.points) - (a.monthly_points ?? a.points);
+        if (ptsDiff !== 0) return ptsDiff;
+        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
+        if (linksDiff !== 0) return linksDiff;
+        return (b.total_all_done || 0) - (a.total_all_done || 0);
+      });
     } else {
       // ALL_TIME
-      return list.sort((a, b) => b.points - a.points);
+      return list.sort((a, b) => {
+        const ptsDiff = (b.points || 0) - (a.points || 0);
+        if (ptsDiff !== 0) return ptsDiff;
+        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
+        if (linksDiff !== 0) return linksDiff;
+        return (b.total_all_done || 0) - (a.total_all_done || 0);
+      });
     }
   }, [activeMembers, period, searchQuery]);
 

@@ -836,10 +836,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // Live Preview fallback mode
+    if (!pass || pass.trim().length < 6) {
+      return { success: false, error: 'পাসওয়ার্ড সঠিকভাবে দিন (সর্বনিম্ন ৬ অক্ষর)।' };
+    }
     const searchId = trimmedId.toLowerCase();
     const found = members.find((m) => m.email.toLowerCase() === searchId || m.member_number?.toLowerCase() === searchId);
     if (!found) {
-      return { success: false, error: 'কোন ইউজার খুঁজে পাওয়া যায়নি। ইমেইল চেক করুন।' };
+      return { success: false, error: 'কোন ইউজার খুঁজে পাওয়া যায়নি। ইমেইল বা মেম্বার নম্বর চেক করুন।' };
     }
     if (found.status === 'PENDING') {
       return {

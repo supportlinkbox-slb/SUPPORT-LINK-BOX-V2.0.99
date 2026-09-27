@@ -59,6 +59,16 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
     return sessionStorage.getItem(STORAGE_SESSION_LINK_KEY);
   });
 
+  // Facebook Opening Mode: 'APP' (default deep-link) vs 'WEB'
+  const [fbOpenMode, setFbOpenMode] = useState<'APP' | 'WEB'>('APP');
+
+  // Fast Support System: Auto Next toggle & 5s Countdown Timer
+  const [autoNextEnabled, setAutoNextEnabled] = useState<boolean>(true);
+  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+
+  // Part-based Filter State ('ALL' or part number)
+  const [selectedPartFilter, setSelectedPartFilter] = useState<number | 'ALL'>('ALL');
+
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -196,6 +206,25 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
     };
   }, [handleReturnFromFacebook]);
 
+  // Handle Auto Next Countdown Timer
+  useEffect(() => {
+    if (autoNextCountdown === null) return;
+
+    if (autoNextCountdown <= 0) {
+      if (currentLink) {
+        advanceToNextPending(currentLink.id);
+      }
+      setAutoNextCountdown(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setAutoNextCountdown((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [autoNextCountdown, currentLink, advanceToNextPending]);
+
   // Support Action execution
   const handleSupportNowClick = async () => {
     if (!currentLink || isProcessing) return;
@@ -220,15 +249,19 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
     openedLinkIdRef.current = currentLink.id;
 
     try {
-      // 1. Open Facebook externally
-      openFacebookPostExternally(currentLink.fb_link);
+      // 1. Open Facebook externally respecting chosen mode (APP or WEB)
+      openFacebookPostExternally(currentLink.fb_link, fbOpenMode);
 
       // 2. Authoritative Atomic RPC call
       const res = await supportLink(currentLink);
       if (!res.success) {
         setErrorMessage(getBengaliSupportErrorMessage(res.error));
       } else {
-        advanceToNextPending(currentLink.id);
+        if (autoNextEnabled) {
+          setAutoNextCountdown(5); // Start 5-second Auto-Next countdown
+        } else {
+          advanceToNextPending(currentLink.id);
+        }
       }
     } catch (err: any) {
       setErrorMessage(getBengaliSupportErrorMessage(err.message));
@@ -362,14 +395,91 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
           </div>
         </div>
 
+        {/* Mode Selector & Fast Support Toolbar (Roadmap 3 Section 1 & 5) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 mt-3 border-t border-slate-800/80 text-xs">
+          {/* Facebook Open Mode Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <span className="text-[11px] text-slate-400 px-2 font-medium">মোড:</span>
+            <button
+              onClick={() => setFbOpenMode('APP')}
+              className={`px-3 py-1 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                fbOpenMode === 'APP'
+                  ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>📱 Facebook App (Fast)</span>
+            </button>
+            <button
+              onClick={() => setFbOpenMode('WEB')}
+              className={`px-3 py-1 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                fbOpenMode === 'WEB'
+                  ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>🌐 Web Browser</span>
+            </button>
+          </div>
+
+          {/* Auto Next Toggle */}
+          <button
+            onClick={() => {
+              setAutoNextEnabled(!autoNextEnabled);
+              setAutoNextCountdown(null);
+            }}
+            className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-2 ${
+              autoNextEnabled
+                ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
+                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Auto Next: {autoNextEnabled ? 'চালু (ON)' : 'বন্ধ (OFF)'}</span>
+          </button>
+        </div>
+
         {/* Dynamic Progress Bar */}
-        <div className="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800 overflow-hidden">
+        <div className="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800 overflow-hidden mt-3">
           <div
             className="bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-500 h-full rounded-full transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
       </div>
+
+      {/* Auto Next Countdown Banner (Roadmap 3 Section 5) */}
+      {autoNextCountdown !== null && (
+        <div className="p-4 bg-gradient-to-r from-cyan-950 via-slate-900 to-blue-950 border border-cyan-600 text-cyan-200 text-xs rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 font-mono font-black text-sm flex items-center justify-center shrink-0 border border-cyan-500/40 animate-pulse">
+              {autoNextCountdown}s
+            </div>
+            <div>
+              <span className="font-bold text-white text-sm block">স্বয়ংক্রিয়ভাবে পরবর্তী পেন্ডিং লিংকে যাওয়া হচ্ছে...</span>
+              <span className="text-[11px] text-slate-300">Fast Support System সক্রিয় রয়েছে।</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={() => {
+                if (currentLink) advanceToNextPending(currentLink.id);
+                setAutoNextCountdown(null);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow transition"
+            >
+              তাত্ক্ষণিক যান
+            </button>
+            <button
+              onClick={() => setAutoNextCountdown(null)}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition border border-slate-700"
+            >
+              টাইমার বাতিল
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Dynamic Status Notices & Alerts */}
       {allDoneSuccessMsg && (
@@ -651,49 +761,99 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
         </div>
       )}
 
-      {/* Playlist Grid of Today's Links */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
+      {/* Playlist Grid of Today's Links with Part-based Navigation */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <List className="w-4 h-4 text-cyan-400" />
             <h3 className="text-sm font-bold text-white">আজকের সকল লিংকের প্লে-লিস্ট</h3>
           </div>
           <span className="text-xs text-slate-400 font-mono">
-            মোট {activeTodaysLinks.length} টি সক্রিয় লিংক
+            মোট {activeTodaysLinks.length} টি সক্রিয় লিংক
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
-          {activeTodaysLinks.map((link, idx) => {
-            const isSupported = isLinkSupported(link.id);
-            const isCurrent = link.id === selectedLinkId;
-            const isOwn = link.owner_id === currentUser?.id;
+        {/* Part-based Chunk Navigation Tabs (Roadmap 3 Section 14) */}
+        {(() => {
+          const partsSet = Array.from(
+            new Set(activeTodaysLinks.map((l) => Number(l.part_number || 1)))
+          ).sort((a: number, b: number) => a - b);
+          if (partsSet.length <= 1) return null;
 
-            return (
+          return (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
               <button
-                key={link.id}
-                onClick={() => handlePlaylistItemClick(link)}
-                className={`p-3 rounded-2xl border text-center transition flex flex-col items-center justify-center gap-1 relative ${
-                  isCurrent
-                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 ring-2 ring-cyan-500/40 font-bold shadow-lg shadow-cyan-500/10'
-                    : isSupported
-                    ? 'bg-emerald-950/30 border-emerald-800/60 text-emerald-400 hover:bg-emerald-950/50'
-                    : isOwn
-                    ? 'bg-slate-900 border-slate-800 text-slate-500 hover:bg-slate-850'
-                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-850'
+                onClick={() => setSelectedPartFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap ${
+                  selectedPartFilter === 'ALL'
+                    ? 'bg-cyan-500 text-slate-950 font-black shadow'
+                    : 'bg-slate-950 text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
               >
-                <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-xs font-bold">#{link.serial_display}</span>
-                  {isSupported && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                </div>
-                <span className="text-[10px] truncate max-w-full text-slate-400 font-medium">
-                  {isOwn ? 'আমার পোস্ট' : link.owner_name.split(' ')[0]}
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono">P{link.part_number}</span>
+                সকল পার্ট ({activeTodaysLinks.length})
               </button>
-            );
-          })}
+              {partsSet.map((partNum) => {
+                const pNum = Number(partNum);
+                const startNum = (pNum - 1) * 20 + 1;
+                const endNum = pNum * 20;
+                const partLinks = activeTodaysLinks.filter((l) => Number(l.part_number || 1) === pNum);
+                const supportedInPart = partLinks.filter((l) => isLinkSupported(l.id)).length;
+                const isPartComplete = partLinks.length > 0 && supportedInPart === partLinks.length;
+
+                return (
+                  <button
+                    key={pNum}
+                    onClick={() => setSelectedPartFilter(pNum)}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                      selectedPartFilter === pNum
+                        ? 'bg-cyan-500 text-slate-950 font-black shadow'
+                        : isPartComplete
+                        ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-300'
+                        : 'bg-slate-950 text-slate-400 border border-slate-800 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>Part {pNum} ({startNum}-{endNum})</span>
+                    {isPartComplete && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+          {activeTodaysLinks
+            .filter((l) => selectedPartFilter === 'ALL' || Number(l.part_number || 1) === selectedPartFilter)
+            .map((link) => {
+              const isSupported = isLinkSupported(link.id);
+              const isCurrent = link.id === selectedLinkId;
+              const isOwn = link.owner_id === currentUser?.id;
+
+              return (
+                <button
+                  key={link.id}
+                  onClick={() => handlePlaylistItemClick(link)}
+                  className={`p-3 rounded-2xl border text-center transition flex flex-col items-center justify-center gap-1 relative ${
+                    isCurrent
+                      ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 ring-2 ring-cyan-500/40 font-bold shadow-lg shadow-cyan-500/10'
+                      : isSupported
+                      ? 'bg-emerald-950/30 border-emerald-800/60 text-emerald-400 hover:bg-emerald-950/50'
+                      : isOwn
+                      ? 'bg-slate-900 border-slate-800 text-slate-500 hover:bg-slate-850'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-850'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="font-mono text-xs font-bold">#{link.serial_display}</span>
+                    {isSupported && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  </div>
+                  <span className="text-[10px] truncate max-w-full text-slate-400 font-medium">
+                    {isOwn ? 'আমার পোস্ট' : link.owner_name.split(' ')[0]}
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono">P{link.part_number}</span>
+                </button>
+              );
+            })}
         </div>
       </div>
 

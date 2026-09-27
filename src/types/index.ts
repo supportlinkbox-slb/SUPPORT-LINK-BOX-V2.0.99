@@ -23,6 +23,10 @@ export interface MemberProfile {
   profile_photo_url?: string;
   points: number;
   weekly_points: number;
+  daily_points?: number;
+  monthly_points?: number;
+  fast_support_days?: number;
+  link_submit_days?: number;
   total_links_submitted: number;
   total_supports_given: number;
   total_all_done: number;
