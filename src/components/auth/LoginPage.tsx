@@ -303,9 +303,18 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      // Force instant signout after registration to ensure non-active users cannot bypass approval
-      await supabase.auth.signOut();
-      localStorage.removeItem('sb-' + (import.meta.env.VITE_SUPABASE_PROJECT_ID || '') + '-auth-token');
+      // Force instant signout and purge all session tokens after registration
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // Ignore signout error
+      }
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('supabase') || key.includes('sb-') || key.includes('auth'))) {
+          localStorage.removeItem(key);
+        }
+      }
       sessionStorage.clear();
 
       setPassword('');
