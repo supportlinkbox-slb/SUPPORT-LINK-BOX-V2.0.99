@@ -85,6 +85,9 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* 🚀 TOP HEADER SPONSOR BANNER (Clean top space) */}
+      <MonetagBanner placement="top-header" />
+
       {/* Top Banner / Summary Header */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none"></div>
@@ -398,6 +401,9 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
         isOpen={isScheduleModalOpen}
         onClose={() => setIsScheduleModalOpen(false)}
       />
+
+      {/* 💰 BOTTOM FOOTER SPONSOR BANNER */}
+      <MonetagBanner placement="links-bottom" />
     </div>
   );
 };

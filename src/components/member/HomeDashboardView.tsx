@@ -70,6 +70,9 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
 
   return (
     <div className="space-y-5 max-w-6xl mx-auto pb-6">
+      {/* 🚀 TOP HEADER SPONSOR BANNER (Clean Empty Space) */}
+      <MonetagBanner placement="top-header" />
+
       {/* ========================================== */}
       {/* ⚠️ TOP CRITICAL ALERTS SECTION */}
       {/* ========================================== */}
@@ -509,6 +512,9 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* 💰 BOTTOM FOOTER SPONSOR BANNER (Empty Space) */}
+      <MonetagBanner placement="home-banner" />
     </div>
   );
 };

@@ -152,6 +152,9 @@ export const MovieLoverView: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {/* 🚀 TOP HEADER SPONSOR BANNER (Clean empty space) */}
+      <MonetagBanner placement="top-header" />
+
       {/* Banner */}
       <div className="bg-gradient-to-r from-purple-900 via-slate-900 to-cyan-950 border border-purple-800/40 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -255,45 +258,54 @@ export const MovieLoverView: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {filteredMovies.map((movie) => (
-                <div
-                  key={movie.id}
-                  onClick={() => setSelectedMovie(movie)}
-                  className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-cyan-500/50 transition duration-300 group cursor-pointer flex flex-col justify-between shadow-lg"
-                >
-                  <div className="relative aspect-[2/3] overflow-hidden bg-slate-950">
-                    <img
-                      src={movie.poster_url}
-                      alt={movie.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80 group-hover:opacity-60 transition" />
+              {filteredMovies.map((movie, idx) => {
+                const shouldShowAdAfter = (idx + 1) % 4 === 0;
 
-                    <div className="absolute top-2 left-2">
-                      <span className="px-2 py-0.5 rounded-full bg-slate-950/80 backdrop-blur-md text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
-                        {movie.release_year || '2024'}
-                      </span>
+                return (
+                  <React.Fragment key={movie.id}>
+                    <div
+                      onClick={() => setSelectedMovie(movie)}
+                      className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-cyan-500/50 transition duration-300 group cursor-pointer flex flex-col justify-between shadow-lg"
+                    >
+                      <div className="relative aspect-[2/3] overflow-hidden bg-slate-950">
+                        <img
+                          src={movie.poster_url}
+                          alt={movie.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80 group-hover:opacity-60 transition" />
+
+                        <div className="absolute top-2 left-2">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-950/80 backdrop-blur-md text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
+                            {movie.release_year || '2024'}
+                          </span>
+                        </div>
+
+                        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                          <span className="px-3 py-1 rounded-xl bg-cyan-500 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow">
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            <span>Watch Now</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 space-y-1">
+                        <h3 className="font-bold text-white text-xs line-clamp-1 group-hover:text-cyan-300 transition">
+                          {movie.title}
+                        </h3>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500">
+                          <span>{movie.category}</span>
+                          <span className="text-slate-400 font-mono">{movie.quality || '1080p'}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                      <span className="px-3 py-1 rounded-xl bg-cyan-500 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow">
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>Watch Now</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 space-y-1">
-                    <h3 className="font-bold text-white text-xs line-clamp-1 group-hover:text-cyan-300 transition">
-                      {movie.title}
-                    </h3>
-                    <div className="flex items-center justify-between text-[10px] text-slate-500">
-                      <span>{movie.category}</span>
-                      <span className="text-slate-400 font-mono">{movie.quality || '1080p'}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                    {shouldShowAdAfter && (
+                      <MonetagBanner placement="movies-inline" />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
           )}
         </div>
