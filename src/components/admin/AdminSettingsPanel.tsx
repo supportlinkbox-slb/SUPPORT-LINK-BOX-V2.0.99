@@ -30,6 +30,7 @@ import { AdminNoticeGeneratorModal } from './AdminNoticeGeneratorModal';
 import { FestivalThemeManagerModal } from './FestivalThemeManagerModal';
 import { FESTIVAL_THEMES } from '../../types/festivalTheme';
 import { lifecycleApi } from '../../lib/supabase';
+import { TimePicker12Hour } from '../common/TimePicker12Hour';
 
 type SettingSectionTab = 'schedule' | 'rules' | 'contact' | 'recovery' | 'theme' | 'backup' | 'security';
 
@@ -289,24 +290,20 @@ export const AdminSettingsPanel: React.FC = () => {
                       <span className="block text-xs font-bold text-slate-200">লিংক জমা শুরুর সময় (BDT)</span>
                       <span className="text-[11px] text-slate-500">প্রতিদিন কত টায় সদস্য লিংক জমা দেওয়া শুরু করবে</span>
                     </div>
-                    <input
-                      type="time"
+                    <TimePicker12Hour
                       value={settings.submission_start_time}
-                      onChange={(e) => setSettings({ ...settings, submission_start_time: e.target.value })}
-                      className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 outline-none w-32 text-center"
+                      onChange={(val) => setSettings({ ...settings, submission_start_time: val })}
                     />
                   </div>
 
                   <div className="p-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-slate-950/30 transition">
                     <div>
                       <span className="block text-xs font-bold text-slate-200">লিংক জমা শেষ সময় (BDT)</span>
-                      <span className="text-[11px] text-slate-500">লিংক জমার শেষ সীমা (ডিফল্ট: ১৬:৫০ PM)</span>
+                      <span className="text-[11px] text-slate-500">লিংক জমার শেষ সীমা (ডিফল্ট: 04:50 PM)</span>
                     </div>
-                    <input
-                      type="time"
+                    <TimePicker12Hour
                       value={settings.submission_end_time}
-                      onChange={(e) => setSettings({ ...settings, submission_end_time: e.target.value })}
-                      className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 outline-none w-32 text-center"
+                      onChange={(val) => setSettings({ ...settings, submission_end_time: val })}
                     />
                   </div>
 
@@ -315,24 +312,20 @@ export const AdminSettingsPanel: React.FC = () => {
                       <span className="block text-xs font-bold text-slate-200">All Done বক্স শুরু হওয়ার সময়</span>
                       <span className="text-[11px] text-slate-500">সাপোর্ট সম্পন্নকারীদের অল ডান অপশন আনলক সময়</span>
                     </div>
-                    <input
-                      type="time"
+                    <TimePicker12Hour
                       value={settings.all_done_start_time}
-                      onChange={(e) => setSettings({ ...settings, all_done_start_time: e.target.value })}
-                      className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 outline-none w-32 text-center"
+                      onChange={(val) => setSettings({ ...settings, all_done_start_time: val })}
                     />
                   </div>
 
                   <div className="p-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-slate-950/30 transition">
                     <div>
                       <span className="block text-xs font-bold text-slate-200">All Done শেষ ডেডলাইন</span>
-                      <span className="text-[11px] text-slate-500">অল ডান করার শেষ রাত ১২:০০ টা (২৩:৫৯ BDT)</span>
+                      <span className="text-[11px] text-slate-500">অল ডান করার শেষ রাত ১১:৫৯ PM (BDT)</span>
                     </div>
-                    <input
-                      type="time"
+                    <TimePicker12Hour
                       value={settings.all_done_deadline_time}
-                      onChange={(e) => setSettings({ ...settings, all_done_deadline_time: e.target.value })}
-                      className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 outline-none w-32 text-center"
+                      onChange={(val) => setSettings({ ...settings, all_done_deadline_time: val })}
                     />
                   </div>
 
@@ -341,10 +334,9 @@ export const AdminSettingsPanel: React.FC = () => {
                       <span className="block text-xs font-bold text-slate-200">সিডিউল লিংক খোলার সময়</span>
                       <span className="text-[11px] text-slate-500">আগামীকালের আগাম লিংক জমা খোলার BDT সময়</span>
                     </div>
-                    <input
-                      type="time"
-                      defaultValue="12:00"
-                      className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 outline-none w-32 text-center"
+                    <TimePicker12Hour
+                      value="12:00"
+                      onChange={() => {}}
                     />
                   </div>
                 </div>

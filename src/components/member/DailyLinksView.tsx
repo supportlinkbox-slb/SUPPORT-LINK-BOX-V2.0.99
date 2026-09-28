@@ -23,6 +23,7 @@ import { openFacebookPostExternally } from '../../utils/facebookLinks';
 import { LinkEditModal } from './LinkEditModal';
 import { ReportModal } from './ReportModal';
 import { ScheduleModal } from './ScheduleModal';
+import { MonetagBanner } from '../common/MonetagBanner';
 
 interface DailyLinksViewProps {
   onOpenSubmitModal: () => void;
@@ -216,22 +217,23 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredLinks.map((link) => {
+          {filteredLinks.map((link, idx) => {
             const isSupported = isLinkSupported(link.id);
             const isOwnLink = link.owner_id === currentUser?.id;
             const canEdit = isAdmin || (isOwnLink && canEditSubmission(link.can_edit_until || link.submitted_at));
+            const shouldShowAdAfter = (idx + 1) % 4 === 0;
 
             return (
-              <div
-                key={link.id}
-                className={`bg-slate-900 border rounded-2xl p-4 shadow-md transition hover:border-slate-700 flex flex-col justify-between ${
-                  link.is_pinned
-                    ? 'border-purple-500/50 bg-purple-950/20'
-                    : isSupported
-                    ? 'border-emerald-800/50 bg-slate-900/90'
-                    : 'border-slate-800'
-                }`}
-              >
+              <React.Fragment key={link.id}>
+                <div
+                  className={`bg-slate-900 border rounded-2xl p-4 shadow-md transition hover:border-slate-700 flex flex-col justify-between ${
+                    link.is_pinned
+                      ? 'border-purple-500/50 bg-purple-950/20'
+                      : isSupported
+                      ? 'border-emerald-800/50 bg-slate-900/90'
+                      : 'border-slate-800'
+                  }`}
+                >
                 {/* Card Top: Serial Badge & Post Type & Category */}
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">
@@ -366,8 +368,14 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
                   </div>
                 </div>
               </div>
-            );
-          })}
+
+              {/* 💰 Inline Non-Intrusive Sponsored Card between links */}
+              {shouldShowAdAfter && (
+                <MonetagBanner placement="links-inline" />
+              )}
+            </React.Fragment>
+          );
+        })}
         </div>
       )}
 
