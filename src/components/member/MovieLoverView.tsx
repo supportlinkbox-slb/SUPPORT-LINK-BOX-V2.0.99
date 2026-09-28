@@ -22,6 +22,7 @@ import { useApp } from '../../context/AppContext';
 import { MovieItem, MovieRequest } from '../../types';
 import { createEphemeralStreamSession, ObfuscatedMediaStreamPayload } from '../../utils/mediaSecurity';
 import { MoviePlayerModal } from './MoviePlayerModal';
+import { MonetagBanner } from '../common/MonetagBanner';
 
 export const MovieLoverView: React.FC = () => {
   const { currentUser, movies, movieRequests, submitMovieRequest } = useApp();
@@ -176,6 +177,9 @@ export const MovieLoverView: React.FC = () => {
           <span>Request a Movie</span>
         </button>
       </div>
+
+      {/* 🎬 MONETAG SPONSORED BANNER */}
+      <MonetagBanner placement="movies-header" />
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3">

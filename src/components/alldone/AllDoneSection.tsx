@@ -15,6 +15,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
 import { DailyAllDoneBox } from './DailyAllDoneBox';
+import { MonetagBanner } from '../common/MonetagBanner';
 
 interface AllDoneSectionProps {
   onGoToSupportSession?: () => void;
@@ -170,6 +171,9 @@ export const AllDoneSection: React.FC<AllDoneSectionProps> = ({ onGoToSupportSes
 
       {/* Today's All Done Box Live List */}
       <DailyAllDoneBox />
+
+      {/* 💰 MONETAG SPONSORED BANNER */}
+      <MonetagBanner placement="alldone-footer" />
     </div>
   );
 };

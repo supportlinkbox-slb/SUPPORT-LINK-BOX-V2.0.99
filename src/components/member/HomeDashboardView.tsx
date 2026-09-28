@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
+import { MonetagBanner } from '../common/MonetagBanner';
 
 interface HomeDashboardViewProps {
   onOpenSubmitModal: () => void;
@@ -228,6 +229,9 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 💰 SPONSORED MONETAG AD BANNER */}
+      <MonetagBanner placement="home-banner" />
 
       {/* ========================================== */}
       {/* 🚀 PRIMARY ACTION BUTTONS BAR */}

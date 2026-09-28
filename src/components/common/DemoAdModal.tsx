@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, CheckCircle2, Clock, ShieldAlert, Sparkles, X, Volume2, VolumeX } from 'lucide-react';
+import { Play, CheckCircle2, Clock, ShieldAlert, Sparkles, X, Volume2, VolumeX, ExternalLink } from 'lucide-react';
+import { triggerMonetagDirectLink } from '../../utils/monetag';
 
 interface DemoAdModalProps {
   isOpen: boolean;
@@ -47,6 +48,8 @@ export const DemoAdModal: React.FC<DemoAdModalProps> = ({
   const handleStartAd = () => {
     setIsPlaying(true);
     setTimeLeft(durationSeconds);
+    // Trigger real high-CPM Monetag SmartLink in background
+    triggerMonetagDirectLink();
   };
 
   const handleClaimReward = () => {
