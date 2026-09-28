@@ -1,62 +1,50 @@
-// Monetag Ad Network Helper & SDK Loader for Support Link Box
-// Clean, Non-Intrusive, High CPM Monetization
-
-declare global {
-  interface Window {
-    monetagDirectLink?: string;
-    showMonetagVignette?: () => void;
-    showMonetagInPagePush?: () => void;
-  }
-}
+// Monetag Official SmartLink & Ad Network Configuration
+// Replace or configure direct smartlink URL
 
 export const MONETAG_CONFIG = {
-  // Direct SmartLink for Rewards / Interstitial Action triggers
-  directLinkUrl: 'https://otieuwou.net/4/8856230', // Fallback or configurable DirectLink
+  // Your official Monetag Direct SmartLink (High CPM Monetization)
+  directLinkUrl: 'https://otieuwou.net/4/8856230',
   
-  // Vignette / Interstitial trigger cooldown in minutes (prevents annoying spam)
-  vignetteCooldownMinutes: 10,
+  // Vignette & Cooldown setting
+  vignetteCooldownMinutes: 5,
   
-  // Storage key to record last interstitial show timestamp
   storageKeyLastAd: 'slb_monetag_last_ad_ts',
+  storageKeyCustomUrl: 'slb_monetag_custom_directlink',
 };
 
 /**
- * Checks if user is eligible for a non-intrusive interstitial/vignette ad based on cooldown.
+ * Gets currently active SmartLink (from localStorage admin setting or default)
  */
-export const canShowInterstitial = (): boolean => {
+export const getActiveMonetagLink = (): string => {
   try {
-    const lastAdTs = localStorage.getItem(MONETAG_CONFIG.storageKeyLastAd);
-    if (!lastAdTs) return true;
-    
-    const elapsedMinutes = (Date.now() - parseInt(lastAdTs, 10)) / (1000 * 60);
-    return elapsedMinutes >= MONETAG_CONFIG.vignetteCooldownMinutes;
-  } catch {
-    return true;
-  }
+    const custom = localStorage.getItem(MONETAG_CONFIG.storageKeyCustomUrl);
+    if (custom && custom.trim().startsWith('http')) {
+      return custom.trim();
+    }
+  } catch {}
+  return MONETAG_CONFIG.directLinkUrl;
 };
 
 /**
- * Marks that an ad was shown to reset cooldown.
+ * Sets custom SmartLink from Admin Panel
  */
-export const recordAdShown = (): void => {
+export const setActiveMonetagLink = (url: string): void => {
   try {
-    localStorage.setItem(MONETAG_CONFIG.storageKeyLastAd, Date.now().toString());
-  } catch {
-    // Ignore storage restrictions
-  }
+    localStorage.setItem(MONETAG_CONFIG.storageKeyCustomUrl, url.trim());
+  } catch {}
 };
 
 /**
- * Opens a clean Monetag SmartLink / Rewarded link in a safe tab if configured.
+ * Triggers Monetag SmartLink in a safe new tab without disturbing app state
  */
 export const triggerMonetagDirectLink = (customUrl?: string): void => {
-  const url = customUrl || MONETAG_CONFIG.directLinkUrl;
+  const url = customUrl || getActiveMonetagLink();
   if (!url) return;
   
   try {
-    recordAdShown();
+    localStorage.setItem(MONETAG_CONFIG.storageKeyLastAd, Date.now().toString());
     window.open(url, '_blank', 'noopener,noreferrer');
   } catch (err) {
-    console.warn('Could not open Monetag direct link:', err);
+    console.warn('Could not open Monetag link:', err);
   }
 };

@@ -23,6 +23,7 @@ import { MovieItem, MovieRequest } from '../../types';
 import { createEphemeralStreamSession, ObfuscatedMediaStreamPayload } from '../../utils/mediaSecurity';
 import { MoviePlayerModal } from './MoviePlayerModal';
 import { MonetagBanner } from '../common/MonetagBanner';
+import { triggerMonetagDirectLink } from '../../utils/monetag';
 
 export const MovieLoverView: React.FC = () => {
   const { currentUser, movies, movieRequests, submitMovieRequest } = useApp();
@@ -59,7 +60,10 @@ export const MovieLoverView: React.FC = () => {
       return;
     }
 
-    // Layer 2: Encrypt raw link with member session salt & generate 3-min ephemeral payload
+    // Layer 2: Trigger high-paying Monetag ad before launching video stream
+    triggerMonetagDirectLink();
+
+    // Encrypt raw link with member session salt & generate 3-min ephemeral payload
     const ephemeralPayload = createEphemeralStreamSession(
       selectedMovie?.id || 'm_default',
       resolutionLabel,
@@ -264,7 +268,11 @@ export const MovieLoverView: React.FC = () => {
                 return (
                   <React.Fragment key={movie.id}>
                     <div
-                      onClick={() => setSelectedMovie(movie)}
+                      onClick={() => {
+                        // 🎬 High-CPM SmartLink Monetization on movie interaction
+                        triggerMonetagDirectLink();
+                        setSelectedMovie(movie);
+                      }}
                       className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-cyan-500/50 transition duration-300 group cursor-pointer flex flex-col justify-between shadow-lg"
                     >
                       <div className="relative aspect-[2/3] overflow-hidden bg-slate-950">

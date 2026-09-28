@@ -31,8 +31,9 @@ import { FestivalThemeManagerModal } from './FestivalThemeManagerModal';
 import { FESTIVAL_THEMES } from '../../types/festivalTheme';
 import { lifecycleApi } from '../../lib/supabase';
 import { TimePicker12Hour } from '../common/TimePicker12Hour';
+import { getActiveMonetagLink, setActiveMonetagLink, MONETAG_CONFIG } from '../../utils/monetag';
 
-type SettingSectionTab = 'schedule' | 'rules' | 'contact' | 'recovery' | 'theme' | 'backup' | 'security';
+type SettingSectionTab = 'schedule' | 'monetag' | 'rules' | 'contact' | 'recovery' | 'theme' | 'backup' | 'security';
 
 export const AdminSettingsPanel: React.FC = () => {
   const {
@@ -176,8 +177,11 @@ export const AdminSettingsPanel: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const [monetagUrlInput, setMonetagUrlInput] = useState(() => getActiveMonetagLink());
+
   const menuItems = [
     { id: 'schedule', label: 'সময়সীমা ও সিডিউল', icon: Clock, desc: 'লিংক জমা ও অল ডান সময়' },
+    { id: 'monetag', label: 'Monetag Ad মনিটাইজেশন', icon: Sparkles, desc: 'স্মার্টলিঙ্ক ও আর্নিং কনফিগার' },
     { id: 'rules', label: 'নিয়ম ও ফ্রি লিমিট', icon: Sliders, desc: 'লেট লিমিট ও থ্রেশহোল্ড' },
     { id: 'contact', label: 'সাপোর্ট হেল্পলাইন', icon: PhoneCall, desc: 'এডমিন ফেসবুক ও হোয়াটসঅ্যাপ' },
     { id: 'theme', label: 'উৎসব ও বিশেষ দিবস থিম', icon: Sparkles, desc: 'জুম্মা, ঈদ, বৈশাখী শুভেচ্ছা থিম' },
@@ -342,6 +346,83 @@ export const AdminSettingsPanel: React.FC = () => {
                 </div>
               </div>
             </form>
+          )}
+
+          {/* Section: Monetag Official Ad & SmartLink Manager */}
+          {activeTab === 'monetag' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl space-y-4">
+              <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/40 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <h2 className="text-sm font-bold text-white">Monetag Official Ad Network কনফিগারেশন</h2>
+                </div>
+                <button
+                  onClick={() => {
+                    setActiveMonetagLink(monetagUrlInput);
+                    setIsSavedNotice(true);
+                    setTimeout(() => setIsSavedNotice(false), 3000);
+                  }}
+                  className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>সেভ করুন</span>
+                </button>
+              </div>
+
+              <div className="p-5 space-y-5 text-xs">
+                <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-transparent p-4 rounded-2xl border border-amber-500/30">
+                  <div className="flex items-center gap-2 font-bold text-amber-300 text-sm mb-1">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Monetag High-CPM Direct SmartLink</span>
+                  </div>
+                  <p className="text-slate-300 leading-relaxed">
+                    আপনার সাইটের সকল ব্যানার, কার্ডের মাঝের অ্যাড, এবং সাসপেনশন রিকভারি টাস্কে এই লিংক থেকে রিয়েল Monetag বিজ্ঞাপন ওপেন হবে এবং আপনার Monetag একাউন্টে আয় জমা হবে।
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1.5">
+                    অফিশিয়াল Monetag Direct SmartLink URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://otieuwou.net/4/8856230"
+                    value={monetagUrlInput}
+                    onChange={(e) => setMonetagUrlInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono focus:border-amber-500 outline-none text-xs"
+                  />
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    ডিফল্ট লিংক: <span className="font-mono text-cyan-400">{MONETAG_CONFIG.directLinkUrl}</span>
+                  </span>
+                </div>
+
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMonetagLink(monetagUrlInput);
+                      window.open(monetagUrlInput, '_blank');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20"
+                  >
+                    <span>Monetag Ad টেস্ট করুন</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMonetagUrlInput(MONETAG_CONFIG.directLinkUrl);
+                      setActiveMonetagLink(MONETAG_CONFIG.directLinkUrl);
+                      setIsSavedNotice(true);
+                      setTimeout(() => setIsSavedNotice(false), 3000);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs transition"
+                  >
+                    ডিফল্ট লিংকে রিসেট
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Section 2: Rules & Limits */}
