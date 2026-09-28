@@ -44,9 +44,13 @@ CREATE TABLE IF NOT EXISTS public.communities (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO public.communities (id, name, description)
-VALUES ('main', 'Support Link Box Official', 'Primary community partition')
-ON CONFLICT (id) DO NOTHING;
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.communities WHERE id = 'main') THEN
+        INSERT INTO public.communities (id, name, description)
+        VALUES ('main', 'Support Link Box Official', 'Primary community partition');
+    END IF;
+END $$;
 
 -- ====================================================================
 -- CHAPTER 02, 03, 04, 05 — CORE PRODUCTION DATA TABLES
@@ -305,9 +309,27 @@ CREATE TABLE IF NOT EXISTS public.settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO public.settings (community_id)
-VALUES ('main')
-ON CONFLICT (community_id) DO NOTHING;
+-- Ensure unique constraint on settings(community_id) if table already existed without it
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'settings_community_id_key' 
+           OR conrelid = 'public.settings'::regclass AND contype = 'u'
+    ) THEN
+        BEGIN
+            ALTER TABLE public.settings ADD CONSTRAINT settings_community_id_key UNIQUE (community_id);
+        EXCEPTION WHEN others THEN null;
+        END;
+    END IF;
+END $$;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.settings WHERE community_id = 'main') THEN
+        INSERT INTO public.settings (community_id) VALUES ('main');
+    END IF;
+END $$;
 
 -- Table 16: points_history (Historical daily snapshots per member)
 CREATE TABLE IF NOT EXISTS public.points_history (
@@ -2184,6 +2206,24 @@ CREATE POLICY "vip_rewards_admin" ON public.vip_reward_entitlements
     USING (
         (SELECT role FROM public.members WHERE auth_user_id = auth.uid()) IN ('ADMIN', 'DEVELOPER')
     );
+
+-- ====================================================================
+-- CHAPTER 20 — STORAGE BUCKETS & STORAGE POLICIES
+-- ====================================================================
+
+DO $$
+BEGIN
+    INSERT INTO storage.buckets (id, name, public)
+    VALUES ('avatars', 'avatars', true), ('media', 'media', true)
+    ON CONFLICT (id) DO UPDATE SET public = true;
+EXCEPTION WHEN others THEN null;
+END $$;
+
+DROP POLICY IF EXISTS "Public Storage Read Avatars" ON storage.objects;
+CREATE POLICY "Public Storage Read Avatars" ON storage.objects FOR SELECT USING (bucket_id IN ('avatars', 'media'));
+
+DROP POLICY IF EXISTS "Authenticated Storage Upload Avatars" ON storage.objects;
+CREATE POLICY "Authenticated Storage Upload Avatars" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id IN ('avatars', 'media'));
 
 -- ====================================================================
 -- CHAPTER 11 — VIEWS FOR LEADERBOARD PERFORMANCE
