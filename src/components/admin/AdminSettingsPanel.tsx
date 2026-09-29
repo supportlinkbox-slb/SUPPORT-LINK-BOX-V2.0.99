@@ -354,7 +354,7 @@ export const AdminSettingsPanel: React.FC = () => {
               <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/40 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <Sparkles className="w-5 h-5 text-amber-400" />
-                  <h2 className="text-sm font-bold text-white">Monetag Official Ad Network কনফিগারেশন</h2>
+                  <h2 className="text-sm font-bold text-white">Direct Link URL কনফিগারেশন</h2>
                 </div>
                 <button
                   onClick={() => {
@@ -373,16 +373,16 @@ export const AdminSettingsPanel: React.FC = () => {
                 <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-transparent p-4 rounded-2xl border border-amber-500/30">
                   <div className="flex items-center gap-2 font-bold text-amber-300 text-sm mb-1">
                     <Sparkles className="w-4 h-4" />
-                    <span>Monetag High-CPM Direct SmartLink</span>
+                    <span>Direct Link URL</span>
                   </div>
                   <p className="text-slate-300 leading-relaxed">
-                    আপনার সাইটের সকল ব্যানার, কার্ডের মাঝের অ্যাড, এবং সাসপেনশন রিকভারি টাস্কে এই লিংক থেকে রিয়েল Monetag বিজ্ঞাপন ওপেন হবে এবং আপনার Monetag একাউন্টে আয় জমা হবে।
+                    এই লিংকটি মুভি খোলার সময় এবং রিকভারি ধাপে ব্যবহৃত হবে।
                   </p>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-300 mb-1.5">
-                    অফিশিয়াল Monetag Direct SmartLink URL
+                    Direct Link URL
                   </label>
                   <input
                     type="url"
@@ -405,7 +405,7 @@ export const AdminSettingsPanel: React.FC = () => {
                     }}
                     className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20"
                   >
-                    <span>Monetag Ad টেস্ট করুন</span>
+                    <span>লিংক টেস্ট করুন</span>
                   </button>
 
                   <button

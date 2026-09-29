@@ -22,7 +22,7 @@ import { useApp } from '../../context/AppContext';
 import { MovieItem, MovieRequest } from '../../types';
 import { createEphemeralStreamSession, ObfuscatedMediaStreamPayload } from '../../utils/mediaSecurity';
 import { MoviePlayerModal } from './MoviePlayerModal';
-import { MonetagBanner } from '../common/MonetagBanner';
+import { AdSlot } from '../common/AdSlot';
 import { triggerMonetagDirectLink } from '../../utils/monetag';
 
 export const MovieLoverView: React.FC = () => {
@@ -60,9 +60,6 @@ export const MovieLoverView: React.FC = () => {
       return;
     }
 
-    // Layer 2: Trigger high-paying Monetag ad before launching video stream
-    triggerMonetagDirectLink();
-
     // Encrypt raw link with member session salt & generate 3-min ephemeral payload
     const ephemeralPayload = createEphemeralStreamSession(
       selectedMovie?.id || 'm_default',
@@ -77,30 +74,34 @@ export const MovieLoverView: React.FC = () => {
       payload: ephemeralPayload,
     });
   };
+
   const handleRequestThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
     if (!allowedTypes.includes(file.type)) {
-      setStatusMessage({ type: 'error', text: 'নিরাপত্তা অ্যালার্ট: কেবল JPG, PNG বা WebP ছবি আপলোড সম্ভব।' });
+      alert('অনুগ্রহ করে JPG, PNG বা WEBP ফরম্যাটের ছবি আপলোড করুন।');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setStatusMessage({ type: 'error', text: 'ছবির ফাইল সাইজ সর্বোচ্চ ৫MB হতে পারবে।' });
+      alert('ছবির সাইজ ৫MB এর কম হতে হবে।');
       return;
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setReqThumbnailUrl(reader.result as string);
-      setStatusMessage({ type: 'success', text: 'থাম্বনেইল ইমেজ নির্বাচন করা হয়েছে!' });
+    reader.onload = (loadEvt) => {
+      setReqThumbnailUrl(loadEvt.target?.result as string);
     };
     reader.readAsDataURL(file);
   };
 
   const handleOpenRequestModal = () => {
+    if (!currentUser) {
+      alert('মুভি রিকোয়েস্ট করতে অনুগ্রহ করে লগইন করুন।');
+      return;
+    }
     setReqTitle('');
     setReqYear(new Date().getFullYear().toString());
     setReqThumbnailUrl('');
@@ -108,10 +109,10 @@ export const MovieLoverView: React.FC = () => {
     setIsRequestModalOpen(true);
   };
 
-  const handleSubmitRequest = async (e: React.FormEvent) => {
+  const handleSubmitMovieRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reqTitle.trim()) {
-      setStatusMessage({ type: 'error', text: 'মুভির নাম টাইপ করুন।' });
+      setStatusMessage({ type: 'error', text: 'মুভির নাম লিখুন।' });
       return;
     }
 
@@ -120,8 +121,8 @@ export const MovieLoverView: React.FC = () => {
 
     const res = await submitMovieRequest({
       movie_title: reqTitle.trim(),
-      release_year: reqYear.trim() || '2024',
-      thumbnail_url: reqThumbnailUrl.trim() || undefined,
+      release_year: reqYear.trim() || undefined,
+      thumbnail_url: reqThumbnailUrl || undefined,
     });
 
     setIsSubmitting(false);
@@ -129,18 +130,16 @@ export const MovieLoverView: React.FC = () => {
     if (res.success) {
       setStatusMessage({
         type: 'success',
-        text: 'আপনার মুভি রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন প্যানেল থেকে রিভিউ করা হচ্ছে।',
+        text: 'আপনার মুভি রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন শীঘ্রই রিভিউ করে যুক্ত করবেন।',
       });
       setTimeout(() => {
         setIsRequestModalOpen(false);
-        setActiveTab('my_requests');
-      }, 1500);
+      }, 2000);
     } else {
-      setStatusMessage({ type: 'error', text: res.error || 'রিকোয়েস্ট সাবমিট করতে সমস্যা হয়েছে।' });
+      setStatusMessage({ type: 'error', text: res.error || 'রিকোয়েস্ট জমা দেওয়া যায়নি।' });
     }
   };
 
-  // Only Published Movies for Members (Layer 3 Security Rule)
   const publishedMovies = movies.filter((m) => m.status === 'Published');
 
   const filteredMovies = publishedMovies.filter((movie) => {
@@ -156,9 +155,6 @@ export const MovieLoverView: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* 🚀 TOP HEADER SPONSOR BANNER (Clean empty space) */}
-      <MonetagBanner placement="top-header" />
-
       {/* Banner */}
       <div className="bg-gradient-to-r from-purple-900 via-slate-900 to-cyan-950 border border-purple-800/40 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -185,8 +181,8 @@ export const MovieLoverView: React.FC = () => {
         </button>
       </div>
 
-      {/* 🎬 MONETAG SPONSORED BANNER */}
-      <MonetagBanner placement="movies-header" />
+      {/* 🎬 SPONSORED BANNER */}
+      <AdSlot />
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
@@ -261,59 +257,63 @@ export const MovieLoverView: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {filteredMovies.map((movie, idx) => {
-                const shouldShowAdAfter = (idx + 1) % 4 === 0;
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {filteredMovies.map((movie, idx) => {
+                  const shouldShowAdAfter = (idx + 1) % 8 === 0;
 
-                return (
-                  <React.Fragment key={movie.id}>
-                    <div
-                      onClick={() => {
-                        // 🎬 High-CPM SmartLink Monetization on movie interaction
-                        triggerMonetagDirectLink();
-                        setSelectedMovie(movie);
-                      }}
-                      className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-cyan-500/50 transition duration-300 group cursor-pointer flex flex-col justify-between shadow-lg"
-                    >
-                      <div className="relative aspect-[2/3] overflow-hidden bg-slate-950">
-                        <img
-                          src={movie.poster_url}
-                          alt={movie.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80 group-hover:opacity-60 transition" />
+                  return (
+                    <React.Fragment key={movie.id}>
+                      <div
+                        onClick={() => {
+                          triggerMonetagDirectLink(undefined, true);
+                          setSelectedMovie(movie);
+                        }}
+                        className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-cyan-500/50 transition duration-300 group cursor-pointer flex flex-col justify-between shadow-lg"
+                      >
+                        <div className="relative aspect-[2/3] overflow-hidden bg-slate-950">
+                          <img
+                            src={movie.poster_url}
+                            alt={movie.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80 group-hover:opacity-60 transition" />
 
-                        <div className="absolute top-2 left-2">
-                          <span className="px-2 py-0.5 rounded-full bg-slate-950/80 backdrop-blur-md text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
-                            {movie.release_year || '2024'}
-                          </span>
+                          <div className="absolute top-2 left-2">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-950/80 backdrop-blur-md text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
+                              {movie.release_year || '2024'}
+                            </span>
+                          </div>
+
+                          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                            <span className="px-3 py-1 rounded-xl bg-cyan-500 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow">
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                              <span>Watch Now</span>
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                          <span className="px-3 py-1 rounded-xl bg-cyan-500 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow">
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>Watch Now</span>
-                          </span>
+                        <div className="p-3 space-y-1">
+                          <h3 className="font-bold text-white text-xs line-clamp-1 group-hover:text-cyan-300 transition">
+                            {movie.title}
+                          </h3>
+                          <div className="flex items-center justify-between text-[10px] text-slate-500">
+                            <span>{movie.category}</span>
+                            <span className="text-slate-400 font-mono">{movie.quality || '1080p'}</span>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="p-3 space-y-1">
-                        <h3 className="font-bold text-white text-xs line-clamp-1 group-hover:text-cyan-300 transition">
-                          {movie.title}
-                        </h3>
-                        <div className="flex items-center justify-between text-[10px] text-slate-500">
-                          <span>{movie.category}</span>
-                          <span className="text-slate-400 font-mono">{movie.quality || '1080p'}</span>
-                        </div>
-                      </div>
-                    </div>
+                      {shouldShowAdAfter && (
+                        <AdSlot className="col-span-full" />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
 
-                    {shouldShowAdAfter && (
-                      <MonetagBanner placement="movies-inline" />
-                    )}
-                  </React.Fragment>
-                );
-              })}
+              {/* Bottom of movies section AdSlot */}
+              <AdSlot />
             </div>
           )}
         </div>
@@ -389,86 +389,96 @@ export const MovieLoverView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal 1: Movie Details Modal */}
+      {/* Movie Details Modal */}
       {selectedMovie && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 space-y-5 my-8 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 relative shadow-2xl">
             <button
               onClick={() => setSelectedMovie(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              className="absolute right-4 top-4 p-2 rounded-xl bg-slate-800/80 text-slate-400 hover:text-white transition"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex gap-4">
               <img
                 src={selectedMovie.poster_url}
                 alt={selectedMovie.title}
-                className="w-full sm:w-40 aspect-[2/3] rounded-2xl object-cover shrink-0 border border-slate-800 shadow-xl"
+                className="w-24 h-36 rounded-2xl object-cover border border-slate-800 shrink-0"
               />
-
-              <div className="space-y-2 flex-1">
-                <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-500/30">
-                  {selectedMovie.category} • {selectedMovie.release_year || '2024'}
+              <div className="space-y-1.5">
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold">
+                  {selectedMovie.category}
                 </span>
-
-                <h2 className="text-lg font-bold text-white">{selectedMovie.title}</h2>
-                <p className="text-xs text-slate-400 leading-relaxed">{selectedMovie.description || 'বিবরণ যুক্ত করা হয়নি।'}</p>
-
-                <div className="text-[11px] text-slate-500 space-y-1 font-mono">
-                  <p>ভাষা: <span className="text-slate-300">{selectedMovie.language || 'Bengali'}</span></p>
-                  <p>কোয়ালিটি: <span className="text-slate-300">{selectedMovie.quality || '1080p Full HD'}</span></p>
-                </div>
+                <h2 className="text-base font-bold text-white">{selectedMovie.title}</h2>
+                <p className="text-xs text-slate-400 font-mono">মুক্তি: {selectedMovie.release_year}</p>
+                <p className="text-xs text-slate-400">কোয়ালিটি: <span className="text-white font-mono">{selectedMovie.quality || '1080p'}</span></p>
               </div>
             </div>
 
-            {/* Video Streams & Links (Layer 3 Auth Secured Stream Gateway) */}
-            <div className="border-t border-slate-800 pt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">ডাউনলোড ও ওয়াচ অপশনস</h3>
-                <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>3-Layer Secured</span>
-                </span>
+            {selectedMovie.description && (
+              <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-2xl border border-slate-800/80">
+                {selectedMovie.description}
+              </p>
+            )}
+
+            {/* Quality Stream Launcher Buttons (Protected DRM Sandbox) */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                <span>ভিডিও কোয়ালিটি ও সার্ভার নির্বাচন</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                {selectedMovie.resolutions?.res_1080p && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {selectedMovie.stream_1080p_url && (
                   <button
-                    onClick={() => {
-                      if (!selectedMovie.resolutions?.res_1080p) return;
-                      handleLaunchStream('1080p Full HD', selectedMovie.resolutions.res_1080p);
-                    }}
-                    className="p-3 rounded-2xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-bold flex items-center justify-between transition"
+                    onClick={() => handleLaunchStream('1080p HD Server', selectedMovie.stream_1080p_url!)}
+                    className="p-3 rounded-2xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-bold text-xs flex items-center justify-between transition group"
                   >
-                    <span>1080p Full HD</span>
-                    <Play className="w-4 h-4 fill-cyan-400" />
+                    <div className="flex items-center gap-2">
+                      <Play className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition" />
+                      <span>1080p Full HD</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">High Speed</span>
                   </button>
                 )}
 
-                {selectedMovie.resolutions?.res_720p && (
+                {selectedMovie.stream_720p_url && (
                   <button
-                    onClick={() => {
-                      if (!selectedMovie.resolutions?.res_720p) return;
-                      handleLaunchStream('720p HD', selectedMovie.resolutions.res_720p);
-                    }}
-                    className="p-3 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-bold flex items-center justify-between transition"
+                    onClick={() => handleLaunchStream('720p Fast Server', selectedMovie.stream_720p_url!)}
+                    className="p-3 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-bold text-xs flex items-center justify-between transition group"
                   >
-                    <span>720p HD</span>
-                    <Play className="w-4 h-4 fill-purple-400" />
+                    <div className="flex items-center gap-2">
+                      <Play className="w-4 h-4 text-purple-400 group-hover:scale-110 transition" />
+                      <span>720p Standard</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">Fast Load</span>
                   </button>
                 )}
 
-                {selectedMovie.pixeldrain_url && (
+                {selectedMovie.stream_480p_url && (
                   <button
-                    onClick={() => {
-                      if (!selectedMovie.pixeldrain_url) return;
-                      handleLaunchStream('Pixeldrain Stream', selectedMovie.pixeldrain_url);
-                    }}
-                    className="p-3 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold flex items-center justify-between transition"
+                    onClick={() => handleLaunchStream('480p Low Data', selectedMovie.stream_480p_url!)}
+                    className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-between transition group"
                   >
-                    <span>Pixeldrain Stream</span>
-                    <Play className="w-4 h-4 fill-amber-400" />
+                    <div className="flex items-center gap-2">
+                      <Play className="w-4 h-4 text-slate-400 group-hover:scale-110 transition" />
+                      <span>480p Data Saver</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">Low Data</span>
+                  </button>
+                )}
+
+                {selectedMovie.direct_download_url && (
+                  <button
+                    onClick={() => handleLaunchStream('Pixeldrain Ultra Stream', selectedMovie.direct_download_url!)}
+                    className="p-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-xs flex items-center justify-between transition group sm:col-span-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Download className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition" />
+                      <span>Pixeldrain Direct Fast Server</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400 font-mono">100% Buffered</span>
                   </button>
                 )}
               </div>
@@ -477,86 +487,100 @@ export const MovieLoverView: React.FC = () => {
         </div>
       )}
 
-      {/* Protected 3-Layer Sandboxed Video Player Modal (Layer 3 DRM Overlay) */}
-      {activeStreamPayload && currentUser && (
+      {/* Active Secure Ephemeral Player */}
+      {activeStreamPayload && (
         <MoviePlayerModal
           movieTitle={activeStreamPayload.movieTitle}
           category={activeStreamPayload.category}
           payload={activeStreamPayload.payload}
-          currentUser={currentUser}
           onClose={() => setActiveStreamPayload(null)}
         />
       )}
 
-      {/* Modal 2: Request A Movie Modal */}
+      {/* Request Movie Modal */}
       {isRequestModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <button
+              onClick={() => setIsRequestModalOpen(false)}
+              className="absolute right-4 top-4 p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Plus className="w-5 h-5 text-cyan-400" />
-                <span>Request a Movie</span>
+                <Plus className="w-4 h-4 text-cyan-400" />
+                <span>নতুন মুভি রিকোয়েস্ট করুন</span>
               </h2>
-              <button onClick={() => setIsRequestModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+              <p className="text-xs text-slate-400 mt-0.5">আপনার পছন্দের মুভি লিংক এডমিনের কাছে পাঠাতে পারেন।</p>
             </div>
 
             {statusMessage && (
               <div
-                className={`p-3 rounded-2xl border text-xs font-bold ${
+                className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
                   statusMessage.type === 'success'
-                    ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
-                    : 'bg-red-950/80 border-red-800 text-red-300'
+                    ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-300'
+                    : 'bg-red-950/60 border border-red-800 text-red-300'
                 }`}
               >
-                {statusMessage.text}
+                {statusMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                )}
+                <span>{statusMessage.text}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmitRequest} className="space-y-4 text-xs">
+            <form onSubmit={handleSubmitMovieRequest} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-slate-300 mb-1">মুভির নাম *</label>
+                <label className="block font-semibold text-slate-300 mb-1">মুভির সঠিক নাম *</label>
                 <input
                   type="text"
-                  required
-                  placeholder="যেমন: Avengers: Endgame"
+                  placeholder="যেমন: Inception, Jawan, তুফান"
                   value={reqTitle}
                   onChange={(e) => setReqTitle(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white outline-none focus:border-cyan-500"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-300 mb-1">মুক্তি পাওয়ার সাল (Release Year)</label>
+                <label className="block font-semibold text-slate-300 mb-1">মুক্তির সাল (Release Year)</label>
                 <input
                   type="text"
-                  placeholder="2019"
+                  placeholder="2024"
                   value={reqYear}
                   onChange={(e) => setReqYear(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 font-mono"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white outline-none focus:border-cyan-500 font-mono"
                 />
               </div>
 
-              <div className="space-y-2 border border-slate-800 rounded-2xl p-3 bg-slate-950/40">
-                <label className="block font-bold text-slate-300">থাম্বনেইল / পোস্টার ছবি (Optional)</label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={reqThumbnailUrl}
-                  onChange={(e) => setReqThumbnailUrl(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500"
-                />
-                <div className="flex items-center gap-2">
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">পোস্টার / থাম্বনেইল ছবি (ঐচ্ছিক)</label>
+                <div className="flex items-center gap-3">
+                  {reqThumbnailUrl ? (
+                    <img
+                      src={reqThumbnailUrl}
+                      alt="Thumbnail Preview"
+                      className="w-12 h-16 rounded-xl object-cover border border-slate-800"
+                    />
+                  ) : (
+                    <div className="w-12 h-16 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-600">
+                      <Upload className="w-4 h-4" />
+                    </div>
+                  )}
+
                   <input
                     type="file"
-                    accept="image/jpeg,image/png,image/webp"
+                    id="req-poster-upload"
+                    accept="image/*"
                     onChange={handleRequestThumbnailUpload}
                     className="hidden"
-                    id="req-thumb-file"
                   />
                   <label
-                    htmlFor="req-thumb-file"
+                    htmlFor="req-poster-upload"
                     className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer font-bold text-[11px] flex items-center gap-1.5 transition"
                   >
                     <Upload className="w-3.5 h-3.5" />

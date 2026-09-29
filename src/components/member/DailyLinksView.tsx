@@ -23,7 +23,7 @@ import { openFacebookPostExternally } from '../../utils/facebookLinks';
 import { LinkEditModal } from './LinkEditModal';
 import { ReportModal } from './ReportModal';
 import { ScheduleModal } from './ScheduleModal';
-import { MonetagBanner } from '../common/MonetagBanner';
+import { AdSlot } from '../common/AdSlot';
 
 interface DailyLinksViewProps {
   onOpenSubmitModal: () => void;
@@ -41,42 +41,46 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
     currentUser,
     isLinkSupported,
     supportLink,
-    canSupportLink,
     pendingRequiredSupportCount,
-    submissionStatus,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPart, setSelectedPart] = useState<number | 'ALL' | 'MY'>('ALL');
+  const [selectedPart, setSelectedPart] = useState<number | 'ALL'>('ALL');
+  const [postTypeFilter, setPostTypeFilter] = useState<'ALL' | 'Video' | 'Image'>('ALL');
   const [editingLink, setEditingLink] = useState<DailyLink | null>(null);
   const [reportingLink, setReportingLink] = useState<DailyLink | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
 
-  // Filter links for today and sort strictly by serial_number ASC (Section 26)
-  // Chapter 7: Exclude soft-removed links from display
+  // Filter links by today's date and active status
   const todaysLinks = dailyLinks
     .filter((l) => l.date === todayDate && (l.status ?? 'active') === 'active')
-    .sort((a, b) => a.serial_number - b.serial_number);
+    .sort((a, b) => {
+      // 1. Pinned links first (Chapter 8 Rule)
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      // 2. Then by serial number ASC
+      return a.serial_number - b.serial_number;
+    });
 
-  // Determine parts
-  const totalParts = Math.max(1, Math.ceil(todaysLinks.length / 20));
-  const partsList = Array.from({ length: totalParts }, (_, i) => i + 1);
+  // Calculate distinct parts available for today
+  const availableParts = Array.from(new Set(todaysLinks.map((l) => l.part_number))).sort(
+    (a, b) => a - b
+  );
 
-  // Filter based on search and selected part
+  // Filtered links based on search & selectors
   const filteredLinks = todaysLinks.filter((link) => {
-    const matchesSearch =
-      link.owner_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      link.owner_member_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      link.caption.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(link.serial_number).includes(searchQuery);
-
-    if (!matchesSearch) return false;
-
-    if (selectedPart === 'MY') {
-      return link.owner_id === currentUser?.id;
-    }
-    if (selectedPart !== 'ALL') {
-      return link.part_number === selectedPart;
+    // 1. Part filter
+    if (selectedPart !== 'ALL' && link.part_number !== selectedPart) return false;
+    // 2. Post type filter
+    if (postTypeFilter !== 'ALL' && link.post_type !== postTypeFilter) return false;
+    // 3. Search query (Serial, Owner Name, Member ID, Caption)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matchSerial = link.serial_display.toLowerCase().includes(q);
+      const matchName = link.owner_name.toLowerCase().includes(q);
+      const matchMemberId = link.owner_member_number.toLowerCase().includes(q);
+      const matchCaption = link.caption?.toLowerCase().includes(q);
+      return matchSerial || matchName || matchMemberId || matchCaption;
     }
     return true;
   });
@@ -86,7 +90,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
   return (
     <div className="space-y-6">
       {/* 🚀 TOP HEADER SPONSOR BANNER (Clean top space) */}
-      <MonetagBanner placement="top-header" />
+      <AdSlot />
 
       {/* Top Banner / Summary Header */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
@@ -113,104 +117,134 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={onGoToSupportSession}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs shadow-lg shadow-orange-500/20 transition flex items-center gap-2 transform hover:-translate-y-0.5"
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 transition flex items-center gap-2 active:scale-95"
             >
               <Flame className="w-4 h-4 fill-slate-950" />
-              <span>সাপোর্ট সেশন শুরু করুন</span>
-              {pendingRequiredSupportCount > 0 && (
-                <span className="bg-slate-950 text-amber-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                  {pendingRequiredSupportCount} বাকি
+              <span>সাপোর্ট সেশন প্লেলিস্ট</span>
+            </button>
+
+            <button
+              onClick={() => setIsScheduleModalOpen(true)}
+              className="px-3.5 py-2.5 bg-purple-600/30 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
+            >
+              <Calendar className="w-4 h-4 text-purple-400" />
+              <span>আগাম সিডিউল</span>
+              {scheduledLinks.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-purple-500 text-[10px] font-mono font-black text-white">
+                  {scheduledLinks.length}
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => setIsScheduleModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-purple-600/30 hover:bg-purple-600/40 text-purple-300 hover:text-white border border-purple-500/40 font-bold text-xs transition flex items-center gap-1.5"
-            >
-              <Calendar className="w-4 h-4" />
-              <span>শিডিউল ({scheduledLinks.filter(s => s.status === 'pending').length})</span>
-            </button>
-
-            <button
               onClick={onOpenSubmitModal}
-              className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg shadow-cyan-600/20 transition flex items-center gap-1.5"
+              className="px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-cyan-500/20 transition flex items-center gap-1.5 active:scale-95"
             >
-              <Plus className="w-4 h-4" />
-              <span>লিংক জমা দিন</span>
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>নতুন লিংক জমা</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Part Filtering & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-        {/* Parts Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
-          <button
-            onClick={() => setSelectedPart('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-              selectedPart === 'ALL'
-                ? 'bg-cyan-500 text-slate-950 font-bold'
-                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            সব লিংক ({todaysLinks.length})
-          </button>
+      {/* Filter and Search Bar */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Box */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
+            <input
+              type="text"
+              placeholder="সিরিয়াল (#01), নাম, মেম্বার আইডি বা ক্যাপশন খুঁজুন..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
+            />
+          </div>
 
-          {partsList.map((part) => (
+          {/* Post Type Selector (ALL / Video / Image) */}
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
             <button
-              key={part}
-              onClick={() => setSelectedPart(part)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                selectedPart === part
-                  ? 'bg-cyan-500 text-slate-950 font-bold'
-                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+              onClick={() => setPostTypeFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                postTypeFilter === 'ALL'
+                  ? 'bg-slate-800 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              Part {part} ({(part - 1) * 20 + 1}-{Math.min(part * 20, todaysLinks.length || part * 20)})
+              সকল ধরন
             </button>
-          ))}
-
-          {currentUser && (
             <button
-              onClick={() => setSelectedPart('MY')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                selectedPart === 'MY'
-                  ? 'bg-purple-600 text-white font-bold'
-                  : 'bg-slate-800/80 text-purple-300 hover:bg-slate-700'
+              onClick={() => setPostTypeFilter('Video')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition ${
+                postTypeFilter === 'Video'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              আমার লিংক
+              <Video className="w-3.5 h-3.5" />
+              <span>ভিডিও</span>
             </button>
-          )}
+            <button
+              onClick={() => setPostTypeFilter('Image')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition ${
+                postTypeFilter === 'Image'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Image className="w-3.5 h-3.5" />
+              <span>ছবি/পোস্ট</span>
+            </button>
+          </div>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="সিরিয়াল, নাম বা মেম্বার আইডি..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-          />
-        </div>
+        {/* 20-Link Part Badges Navigation (Chapter 8 Rule) */}
+        {availableParts.length > 1 && (
+          <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <span className="text-slate-500 text-[11px] font-semibold whitespace-nowrap">
+              পার্ট ফিল্টার:
+            </span>
+            <button
+              onClick={() => setSelectedPart('ALL')}
+              className={`px-3 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                selectedPart === 'ALL'
+                  ? 'bg-cyan-500 text-slate-950 font-black'
+                  : 'bg-slate-950 text-slate-400 hover:bg-slate-800'
+              }`}
+            >
+              সকল পার্ট ({todaysLinks.length})
+            </button>
+
+            {availableParts.map((partNum) => {
+              const startNum = (partNum - 1) * 20 + 1;
+              const endNum = partNum * 20;
+              const partCount = todaysLinks.filter((l) => l.part_number === partNum).length;
+
+              return (
+                <button
+                  key={partNum}
+                  onClick={() => setSelectedPart(partNum)}
+                  className={`px-3 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                    selectedPart === partNum
+                      ? 'bg-cyan-500 text-slate-950 font-black'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:bg-slate-800'
+                  }`}
+                >
+                  Part {partNum} (#{startNum}-#{endNum}) [{partCount}]
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Links Grid */}
+      {/* Link Cards Grid */}
       {filteredLinks.length === 0 ? (
-        <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-12 text-center">
-          <LinkIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-white">
-            {searchQuery ? 'সার্চ ফিল্টারের সাথে কোনো লিংক মিলছে না' : 'আজ এখনো কোনো লিংক জমা হয়নি।'}
-          </h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            {searchQuery
-              ? 'অনুগ্রহ করে ভিন্ন কোনো নাম বা সিরিয়াল দিয়ে চেষ্টা করুন।'
-              : 'সকাল ১০:০০ থেকে বিকাল ৪:৫০ এর মধ্যে আপনার ফেসবুক লিংক জমা দিন।'}
-          </p>
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 text-xs">
+          <LinkIcon className="w-8 h-8 mx-auto text-slate-600 mb-2" />
+          <p className="font-semibold text-slate-300">কোনো সাপোর্ট লিংক পাওয়া যায়নি।</p>
+          <p className="text-[11px] text-slate-500 mt-1">অনুসন্ধান বা ফিল্টার পরিবর্তন করে আবার দেখুন।</p>
           <button
             onClick={onOpenSubmitModal}
             className="mt-4 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition"
@@ -224,7 +258,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
             const isSupported = isLinkSupported(link.id);
             const isOwnLink = link.owner_id === currentUser?.id;
             const canEdit = isAdmin || (isOwnLink && canEditSubmission(link.can_edit_until || link.submitted_at));
-            const shouldShowAdAfter = (idx + 1) % 4 === 0;
+            const shouldShowAdAfter = (idx + 1) % 8 === 0;
 
             return (
               <React.Fragment key={link.id}>
@@ -298,65 +332,57 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
                   {/* Caption & Instructions */}
                   <div className="space-y-1.5 my-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
                     <p className="text-xs text-slate-200 line-clamp-2 font-medium">
-                      {link.caption}
+                      {link.caption || 'ক্যাপশন দেওয়া হয়নি'}
                     </p>
-                    <p className="text-[11px] text-cyan-400/90 italic flex items-center gap-1">
-                      <span>নির্দেশনা:</span>
-                      <span className="text-slate-300">{link.instruction}</span>
-                    </p>
+                    {link.instruction && (
+                      <p className="text-[11px] text-cyan-300/90 italic line-clamp-1 border-t border-slate-800/60 pt-1">
+                        📌 {link.instruction}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                {/* Card Bottom: Support Status & Actions */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-2">
-                  <div className="flex items-center gap-1.5">
-                    {isSupported ? (
-                      <span className="flex items-center gap-1 text-xs text-emerald-400 font-semibold bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-800/50">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>সাপোর্ট সম্পন্ন</span>
-                      </span>
-                    ) : isOwnLink ? (
-                      <span className="text-[11px] text-slate-400 bg-slate-800 px-2 py-1 rounded">
-                        আপনার নিজের লিংক
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        <span>সাপোর্ট বাকি</span>
-                      </span>
-                    )}
+                {/* Card Bottom: Support Counts & Action Buttons */}
+                <div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 mb-3 pt-2 border-t border-slate-800">
+                    <div className="flex items-center gap-1 font-mono">
+                      <span>সাপোর্ট প্রাপ্ত:</span>
+                      <strong className="text-white font-bold">{link.total_supports_count || 0}</strong>
+                    </div>
+
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {formatToBDT(link.submitted_at, false)} BDT
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    {/* Report link button */}
-                    {!isOwnLink && (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {canEdit && (
+                        <button
+                          onClick={() => setEditingLink(link)}
+                          className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
+                          title="লিংক এডিট করুন"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
                       <button
                         onClick={() => setReportingLink(link)}
-                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 transition"
+                        className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-amber-400 hover:bg-slate-700 transition"
                         title="সমস্যা রিপোর্ট করুন"
                       >
                         <ShieldAlert className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    </div>
 
-                    {/* Edit button if within grace period */}
-                    {canEdit && (
-                      <button
-                        onClick={() => setEditingLink(link)}
-                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-400 transition"
-                        title="এডিট / ডিলিট"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                    {/* Primary Action: Support Now (External Facebook Workflow) */}
                     <button
-                      onClick={async () => {
-                        openFacebookPostExternally(link.fb_link, 'APP');
-                        await supportLink(link);
+                      onClick={() => {
+                        openFacebookPostExternally(link.facebook_url);
+                        if (!isOwnLink && !isSupported) {
+                          supportLink(link.id);
+                        }
                       }}
-                      disabled={isOwnLink}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm ${
                         isSupported
                           ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -374,7 +400,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
 
               {/* 💰 Inline Non-Intrusive Sponsored Card between links */}
               {shouldShowAdAfter && (
-                <MonetagBanner placement="links-inline" />
+                <AdSlot />
               )}
             </React.Fragment>
           );
@@ -403,7 +429,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
       />
 
       {/* 💰 BOTTOM FOOTER SPONSOR BANNER */}
-      <MonetagBanner placement="links-bottom" />
+      <AdSlot />
     </div>
   );
 };

@@ -14,7 +14,7 @@ export const DemoAdModal: React.FC<DemoAdModalProps> = ({
   isOpen,
   onClose,
   onAdCompleted,
-  adTitle = 'স্পন্সরড ভিডিও বিজ্ঞাপন (Reactivation Ad)',
+  adTitle = 'রিকভারি ধাপ',
   durationSeconds = 15,
 }) => {
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
@@ -48,8 +48,8 @@ export const DemoAdModal: React.FC<DemoAdModalProps> = ({
   const handleStartAd = () => {
     setIsPlaying(true);
     setTimeLeft(durationSeconds);
-    // Trigger real high-CPM Monetag SmartLink in background
-    triggerMonetagDirectLink();
+    // Open the sponsor link once when the recovery step starts
+    triggerMonetagDirectLink(undefined, true);
   };
 
   const handleClaimReward = () => {
@@ -87,15 +87,15 @@ export const DemoAdModal: React.FC<DemoAdModalProps> = ({
               <div className="w-16 h-16 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/20 animate-pulse">
                 <Play className="w-8 h-8 fill-amber-400 ml-1" />
               </div>
-              <h4 className="text-sm font-bold text-white">বিজ্ঞাপন দেখে একাউন্ট রিকভার করুন</h4>
+              <h4 className="text-sm font-bold text-white">রিকভারি ধাপ সম্পন্ন করুন</h4>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                {durationSeconds} সেকেন্ডের ভিডিও বিজ্ঞাপনটি সম্পূর্ণ দেখলে আপনার পেন্ডিং রিকভারি টাস্ক ভেরিফাই হবে।
+                {durationSeconds} সেকেন্ড অপেক্ষা করলে আপনার রিকভারি সম্পন্ন হবে।
               </p>
               <button
                 onClick={handleStartAd}
                 className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition shadow-lg shadow-amber-500/30"
               >
-                বিজ্ঞাপন শুরু করুন (Watch Ad)
+                শুরু করুন
               </button>
             </div>
           )}
@@ -106,7 +106,7 @@ export const DemoAdModal: React.FC<DemoAdModalProps> = ({
                 <Clock className="w-6 h-6" />
               </div>
               <div className="text-2xl font-black text-white font-mono">{timeLeft}s</div>
-              <p className="text-xs text-slate-300">বিজ্ঞাপন চলছে, অনুগ্রহ করে অপেক্ষা করুন...</p>
+              <p className="text-xs text-slate-300">অপেক্ষা করুন...</p>
 
               {/* Mute Button */}
               <button
@@ -123,7 +123,7 @@ export const DemoAdModal: React.FC<DemoAdModalProps> = ({
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h4 className="text-sm font-bold text-white">বিজ্ঞাপন দেখা সম্পন্ন হয়েছে!</h4>
+              <h4 className="text-sm font-bold text-white">ধাপ সম্পন্ন হয়েছে!</h4>
               <p className="text-xs text-emerald-400 font-medium">
                 আপনার রিকভারি ভেরিফিকেশন সফল হয়েছে। এখন একাউন্ট আনলক করতে পারবেন।
               </p>
@@ -150,7 +150,7 @@ export const DemoAdModal: React.FC<DemoAdModalProps> = ({
           </button>
         ) : (
           <p className="text-[11px] text-slate-500 text-center">
-            * বিজ্ঞাপন মাঝপথে বন্ধ করলে রিকভারি সম্পন্ন হবে না।
+            * মাঝপথে বন্ধ করলে রিকভারি সম্পন্ন হবে না।
           </p>
         )}
       </div>

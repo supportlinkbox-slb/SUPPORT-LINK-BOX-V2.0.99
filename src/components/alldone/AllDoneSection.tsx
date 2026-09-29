@@ -15,7 +15,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
 import { DailyAllDoneBox } from './DailyAllDoneBox';
-import { MonetagBanner } from '../common/MonetagBanner';
+import { AdSlot } from '../common/AdSlot';
 
 interface AllDoneSectionProps {
   onGoToSupportSession?: () => void;
@@ -58,71 +58,80 @@ export const AllDoneSection: React.FC<AllDoneSectionProps> = ({ onGoToSupportSes
           </div>
 
           {/* Fastest Bonuses Table Overview */}
-          <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl shrink-0 w-full md:w-64">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400 mb-2">
-              <Trophy className="w-4 h-4" />
-              <span>দ্রুততম ৫ জনের বোনাস পয়েন্ট:</span>
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 shrink-0 w-full md:w-64 space-y-2">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              <span>Fastest Support Bonuses</span>
             </div>
-            <div className="space-y-1 text-xs font-mono">
+            <div className="space-y-1 font-mono text-xs">
               <div className="flex justify-between text-amber-300">
-                <span>🥇 ১ম জন:</span>
-                <span className="font-bold">+১০ বোনাস (১৫ মোট)</span>
+                <span>🥇 1st Fastest</span>
+                <span>+50 Pts</span>
               </div>
               <div className="flex justify-between text-slate-300">
-                <span>🥈 ২য় জন:</span>
-                <span className="font-bold">+৮ বোনাস (১৩ মোট)</span>
+                <span>🥈 2nd Fastest</span>
+                <span>+30 Pts</span>
               </div>
-              <div className="flex justify-between text-amber-500">
-                <span>🥉 ৩য় জন:</span>
-                <span className="font-bold">+৬ বোনাস (১১ মোট)</span>
+              <div className="flex justify-between text-amber-600">
+                <span>🥉 3rd Fastest</span>
+                <span>+20 Pts</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>৪র্থ / ৫ম জন:</span>
-                <span className="font-bold">+৪ / +২ বোনাস (৯ / ৭ মোট)</span>
+              <div className="flex justify-between text-cyan-400">
+                <span>✨ 4th-10th Rank</span>
+                <span>+10 Pts</span>
               </div>
-              <div className="flex justify-between text-slate-500 border-t border-slate-800 pt-1">
-                <span>অন্যান্য সবাই:</span>
-                <span className="font-bold text-emerald-400">+৫ পয়েন্ট (Base)</span>
+              <div className="flex justify-between text-slate-400 border-t border-slate-800/80 pt-1">
+                <span>Standard Completion</span>
+                <span>+5 Pts</span>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* User Submission Status Overview */}
-        <div className="mt-8 pt-6 border-t border-slate-800 flex flex-col items-center text-center">
+      {/* Real-time Status Notification */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+          <Clock className="w-4 h-4 text-cyan-400" />
+          <span>আপনার All Done ভেরিফিকেশন স্ট্যাটাস</span>
+        </h2>
+
+        <div>
           {isAllDoneSubmittedToday && userAllDoneRecord ? (
-            <div className="bg-emerald-950/40 border border-emerald-800/80 rounded-2xl p-6 max-w-md w-full text-center space-y-2">
-              <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-              <div className="text-base font-bold text-white">আজকের All Done সম্পন্ন হয়েছে!</div>
-              <div className="text-xs text-slate-300">
-                সাবমিশন সময়: {formatToBDT(userAllDoneRecord.completed_at, true)}
+            <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-2xl p-5 text-center space-y-2">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-2">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
+              <div className="text-lg font-black text-white">আজকের All Done সম্পন্ন হয়েছে!</div>
+              <p className="text-xs text-slate-300 font-mono">
+                সাবমিশন টাইম: {formatToBDT(userAllDoneRecord.completed_at, true)}
+              </p>
               <div className="flex items-center justify-center gap-2 pt-2">
                 {userAllDoneRecord.fastest_rank ? (
-                  <span className="bg-amber-500 text-slate-950 font-black text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1">
-                    <Trophy className="w-3.5 h-3.5" />
-                    <span>Rank #{userAllDoneRecord.fastest_rank} Fastest</span>
+                  <span className="bg-amber-500 text-slate-950 font-black text-xs px-3 py-1 rounded-full shadow">
+                    🏆 Rank #{userAllDoneRecord.fastest_rank} Fastest
                   </span>
                 ) : null}
                 <span className="bg-emerald-500/20 text-emerald-400 font-bold text-xs px-3 py-1 rounded-full border border-emerald-500/30">
-                  +{userAllDoneRecord.total_points} Points Awarded
+                  +{userAllDoneRecord.total_points} Points
                 </span>
               </div>
             </div>
           ) : !isSupportComplete ? (
-            <div className="bg-amber-950/40 border border-amber-800/60 rounded-2xl p-6 max-w-lg w-full text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6" />
+            <div className="bg-amber-950/20 border border-amber-800/40 rounded-2xl p-5 text-center space-y-2">
+              <div className="w-10 h-10 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto mb-1">
+                <AlertCircle className="w-5 h-5" />
               </div>
-              <div className="text-base font-bold text-white">সাপোর্ট এখনও অসম্পূর্ণ রয়েছে</div>
-              <p className="text-xs text-amber-300 leading-relaxed">
-                আপনার এখনও <span className="font-bold text-white">{pendingRequiredSupportCount}</span> টি লিংকে সাপোর্ট দেওয়া বাকি আছে। সবগুলো লিংকে সাপোর্ট সম্পন্ন করার পরই All Done সাবমিট সক্রিয় হবে।
+              <div className="text-base font-bold text-white">সাপোর্ট অপূর্ণ রয়েছে</div>
+              <p className="text-xs text-amber-200">
+                All Done জমা দেওয়ার জন্য আজকের সকল নির্ধারিত লিংকে সাপোর্ট সম্পন্ন করতে হবে। এখনো{' '}
+                <strong className="text-white font-mono">{pendingRequiredSupportCount}</strong> টি সাপোর্ট বাকি রয়েছে।
               </p>
               {onGoToSupportSession && (
                 <div className="pt-2">
                   <button
                     onClick={onGoToSupportSession}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-xs shadow-lg shadow-orange-500/20 transition flex items-center gap-2 mx-auto transform hover:scale-105"
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition flex items-center gap-1.5 mx-auto"
                   >
                     <Flame className="w-4 h-4 fill-slate-950" />
                     <span>সাপোর্ট সেশনে যান</span>
@@ -131,22 +140,18 @@ export const AllDoneSection: React.FC<AllDoneSectionProps> = ({ onGoToSupportSes
               )}
             </div>
           ) : !allDoneStatus.isOpen ? (
-            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 max-w-lg w-full text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mx-auto">
-                <Clock className="w-6 h-6" />
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 text-center space-y-2">
+              <div className="w-10 h-10 rounded-full bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto mb-1">
+                <Clock className="w-5 h-5" />
               </div>
-              <div className="text-base font-bold text-white">সব সাপোর্ট সম্পন্ন! All Done উইন্ডো অপেক্ষায়</div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                আপনার সকল সাপোর্ট সম্পন্ন হয়েছে। All Done সাবমিশন শুরু হবে বিকাল ৫:০০ (১৭:০০ BDT)-এ। ১৭:০০ BDT হলে Link Box / Support Session পেজ থেকে আপনি All Done সাবমিট করতে পারবেন।
+              <div className="text-base font-bold text-white">All Done উইন্ডো এখনো চালু হয়নি</div>
+              <p className="text-xs text-slate-400">
+                আপনার সকল সাপোর্ট সম্পন্ন হয়েছে! প্রতিদিন বিকাল ৫:০০ টা (BDT) থেকে All Done বক্স উন্মুক্ত হবে।
               </p>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 text-xs font-mono">
-                <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                <span>উইন্ডো: ১৭:০০ - ২৪:০০ BDT</span>
-              </div>
             </div>
           ) : (
-            <div className="bg-emerald-950/30 border border-emerald-800/60 rounded-2xl p-6 max-w-lg w-full text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+            <div className="bg-emerald-950/20 border border-emerald-800/40 rounded-2xl p-5 text-center space-y-2">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-1">
                 <Sparkles className="w-6 h-6" />
               </div>
               <div className="text-base font-bold text-white">All Done সাবমিশনের জন্য প্রস্তুত!</div>
@@ -172,8 +177,8 @@ export const AllDoneSection: React.FC<AllDoneSectionProps> = ({ onGoToSupportSes
       {/* Today's All Done Box Live List */}
       <DailyAllDoneBox />
 
-      {/* 💰 MONETAG SPONSORED BANNER */}
-      <MonetagBanner placement="alldone-footer" />
+      {/* 💰 SPONSORED BANNER */}
+      <AdSlot />
     </div>
   );
 };

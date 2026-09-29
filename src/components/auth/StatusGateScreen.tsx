@@ -18,9 +18,9 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
     try {
       const { error } = await supabase.rpc('rpc_complete_ad_recovery', { p_member_id: user.id });
       if (error) {
-        alert('অ্যাড রিকভারিতে সমস্যা হয়েছে: ' + error.message);
+        alert('রিকভারিতে সমস্যা হয়েছে: ' + error.message);
       } else {
-        alert('আপনার অ্যাড রিকভারি সফল হয়েছে। পেজ রিফ্রেশ করুন।');
+        alert('আপনার রিকভারি সফল হয়েছে। পেজ রিফ্রেশ করুন।');
         window.location.reload();
       }
     } catch {
@@ -58,65 +58,70 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
           icon: <ShieldAlert className="w-8 h-8 text-amber-400" />,
           title: 'অ্যাক্সেস সীমিত',
           description: `আপনার অ্যাকাউন্ট স্ট্যাটাস: ${user.status}`,
-          badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+          badgeColor: 'bg-slate-800 text-slate-300 border-slate-700',
         };
     }
   };
 
-  const details = getStatusDetails();
+  const statusInfo = getStatusDetails();
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
-      <div className="w-full max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-        <div className={`w-16 h-16 rounded-2xl mx-auto flex items-center justify-center border shadow-lg ${details.badgeColor}`}>
-          {details.icon}
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl text-center">
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto shadow-inner">
+          {statusInfo.icon}
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-xl font-bold text-white">{details.title}</h1>
-          <p className="text-xs text-slate-300 leading-relaxed px-2">
-            {details.description}
-          </p>
-        </div>
-
-        <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 text-left space-y-2 text-xs">
-          <div className="flex justify-between">
-            <span className="text-slate-500">মেম্বার নম্বর:</span>
-            <span className="text-slate-200 font-mono font-bold">{user.member_number}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">নাম:</span>
-            <span className="text-slate-200 font-medium">{user.name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">ইমেইল:</span>
-            <span className="text-slate-200 font-medium">{user.email}</span>
-          </div>
-        </div>
-
-        {/* Active Admin Support Helpline Cards */}
-        <div className="border-t border-slate-800 pt-4 text-left space-y-3">
-          <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
-            সহায়তার জন্য এডমিন হেল্পলাইন:
+          <span
+            className={`inline-block px-3 py-1 rounded-full text-xs font-mono font-bold uppercase border ${statusInfo.badgeColor}`}
+          >
+            {user.status}
           </span>
-          <div className="bg-slate-950 border border-slate-800 p-3 rounded-2xl space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-emerald-400">Support Link Box Helpline</span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                Active Admin
-              </span>
+          <h1 className="text-xl font-bold text-white tracking-tight">{statusInfo.title}</h1>
+          <p className="text-xs text-slate-400 leading-relaxed">{statusInfo.description}</p>
+        </div>
+
+        {/* Member Profile Summary Card */}
+        <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 text-left space-y-2 text-xs">
+          <div className="flex justify-between border-b border-slate-800/60 pb-2">
+            <span className="text-slate-500">নাম:</span>
+            <span className="text-slate-200 font-bold">{user.name}</span>
+          </div>
+          <div className="flex justify-between border-b border-slate-800/60 pb-2">
+            <span className="text-slate-500">আইডি নম্বর:</span>
+            <span className="text-cyan-400 font-mono font-bold">{user.member_number}</span>
+          </div>
+          <div className="flex justify-between border-b border-slate-800/60 pb-2">
+            <span className="text-slate-500">ইমেইল:</span>
+            <span className="text-slate-300 font-mono text-[11px] truncate max-w-[200px]">
+              {user.email}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">রোল:</span>
+            <span className="text-slate-300 font-semibold">{user.role}</span>
+          </div>
+        </div>
+
+        {/* Support Helpline & Action */}
+        <div className="space-y-3 pt-2">
+          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2.5 text-left">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              এডমিন সহায়তা কেন্দ্র
             </div>
-            <p className="text-[11px] text-slate-400">
-              একাউন্ট আনলক বা এপ্রুভালের জন্য নিচের মাধ্যমে যোগাযোগ করতে পারেন।
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              আপনার অ্যাকাউন্টটি দ্রুত সক্রিয় বা যাচাই করতে নিচের যে কোনো একটি মাধ্যমে সরাসরি
+              এডমিনের সাথে যোগাযোগ করতে পারেন:
             </p>
-            <div className="pt-1 flex gap-2">
+            <div className="flex gap-2 pt-1">
               <a
-                href="https://facebook.com/supportlinkbox"
+                href="https://facebook.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 py-2 rounded-xl bg-blue-600/20 text-blue-300 border border-blue-500/30 font-bold text-center text-[11px] hover:bg-blue-600 hover:text-white transition"
               >
-                ফেসবুক মেসেজ
+                ফেসবুক ইনবক্স
               </a>
               <a
                 href="https://wa.me/8801700000000"
@@ -136,7 +141,7 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
             className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25"
           >
             <PlayCircle className="w-4 h-4 fill-slate-950" />
-            <span>স্পন্সরড অ্যাড দেখে আইডি রি-অ্যাক্টিভ করুন</span>
+            <span>রিকভারি ধাপ সম্পন্ন করুন</span>
           </button>
         )}
 
@@ -153,7 +158,7 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
         isOpen={isAdOpen}
         onClose={() => setIsAdOpen(false)}
         onAdCompleted={handleAdCompleted}
-        adTitle="অ্যাডের মাধ্যমে অ্যাকাউন্ট ইনস্ট্যান্ট রি-অ্যাক্টিভেশন"
+        adTitle="অ্যাকাউন্ট রি-অ্যাক্টিভেশন"
         durationSeconds={15}
       />
     </div>

@@ -24,7 +24,7 @@ import { getBengaliSupportErrorMessage } from '../../utils/bengaliErrors';
 import { formatToBDT } from '../../utils/bangladeshTime';
 import { supportApi } from '../../lib/supabase';
 import { ReportModal } from './ReportModal';
-import { MonetagBanner } from '../common/MonetagBanner';
+import { AdSlot } from '../common/AdSlot';
 
 interface PlaylistSupportSessionProps {
   onGoToAllDone: () => void;
@@ -358,7 +358,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
       {/* 🚀 TOP HEADER SPONSOR BANNER (Clean empty space) */}
-      <MonetagBanner placement="top-header" />
+      <AdSlot />
 
       {/* Session Header Card & Progress */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
@@ -885,7 +885,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
       />
 
       {/* 💰 BOTTOM FOOTER SPONSOR BANNER (Clean empty space) */}
-      <MonetagBanner placement="session-bottom" />
+      <AdSlot />
     </div>
   );
 };

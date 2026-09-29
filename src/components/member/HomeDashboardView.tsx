@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
-import { MonetagBanner } from '../common/MonetagBanner';
+import { AdSlot } from '../common/AdSlot';
 
 interface HomeDashboardViewProps {
   onOpenSubmitModal: () => void;
@@ -71,7 +71,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   return (
     <div className="space-y-5 max-w-6xl mx-auto pb-6">
       {/* 🚀 TOP HEADER SPONSOR BANNER (Clean Empty Space) */}
-      <MonetagBanner placement="top-header" />
+      <AdSlot />
 
       {/* ========================================== */}
       {/* ⚠️ TOP CRITICAL ALERTS SECTION */}
@@ -102,13 +102,16 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
               className="px-3 py-1.5 bg-red-500 hover:bg-red-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition shrink-0 flex items-center gap-1"
             >
               <span>রিপোর্ট দেখুন</span>
-              <ChevronRight className="w-4 h-4" />
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="space-y-2 pt-1 border-t border-red-800/60">
-            {reportsAgainstMyLinks.slice(0, 2).map((rep) => (
-              <div key={rep.id} className="bg-slate-950/80 rounded-xl p-2.5 text-xs flex items-center justify-between text-slate-200">
+          <div className="space-y-1.5 pt-1 border-t border-red-500/30">
+            {reportsAgainstMyLinks.map((rep) => (
+              <div
+                key={rep.id}
+                className="bg-red-950/60 p-2.5 rounded-xl border border-red-800/60 flex items-center justify-between text-xs"
+              >
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-cyan-400 font-bold">#{rep.link_serial}</span>
                   <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-medium text-[10px]">
@@ -233,9 +236,6 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 💰 SPONSORED MONETAG AD BANNER */}
-      <MonetagBanner placement="home-banner" />
-
       {/* ========================================== */}
       {/* 🚀 PRIMARY ACTION BUTTONS BAR */}
       {/* ========================================== */}
@@ -300,175 +300,184 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             )}
           </div>
 
-          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px]">
-            {pendingRequiredSupportCount > 0 ? (
-              <span className="text-amber-400 font-bold flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 shrink-0" />
-                <span>সাপোর্ট বাকি</span>
-              </span>
-            ) : (
-              <span className="text-slate-500">ডেইলি ট্র্যাকিং</span>
-            )}
-            {myTodayLink && (
-              <span className="text-cyan-400 font-mono font-bold">ACTIVE</span>
-            )}
+          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400">আমার স্লট</span>
+            <span className="text-cyan-400 font-bold font-mono">
+              {myTodayLink ? `Part ${myTodayLink.part_number}` : 'No Link'}
+            </span>
           </div>
         </div>
 
-        {/* CARD 2: আজকে মোট জমা লিংক */}
-        <div className="bg-slate-900/90 border border-slate-800/80 hover:border-blue-500/40 rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group">
+        {/* CARD 2: আজকের মোট জমা লিংক */}
+        <div className={`bg-slate-900/90 border rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group hover:scale-[1.02] duration-300 ${
+          isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80 hover:border-purple-500/40'
+        }`}>
           <div className="flex items-start justify-between gap-1">
             <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
               মোট জমা লিংক
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
-              <FileSpreadsheet className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="my-auto">
-            <div className="text-2xl sm:text-3xl font-black text-white font-mono">
-              {todaysTotalLinksCount} <span className="text-xs font-sans font-normal text-slate-400">টি</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1">আজকের মোট কমিউনিটি পোস্ট</p>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-[10px] text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
-            <span>লাইভ আপডেট</span>
-          </div>
-        </div>
-
-        {/* CARD 3: আপনার প্রদানকৃত সাপোর্ট */}
-        <div className="bg-slate-900/90 border border-slate-800/80 hover:border-emerald-500/40 rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group">
-          <div className="flex items-start justify-between gap-1">
-            <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
-              প্রদানকৃত সাপোর্ট
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="my-auto">
-            <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
-              {mySupportedLinksCount} <span className="text-xs font-sans font-normal text-slate-400">টি</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1">কমেন্ট ও রিয়েক্ট প্রদান</p>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-            <Sparkles className="w-3 h-3 shrink-0" />
-            <span>পয়েন্ট অর্জিত</span>
-          </div>
-        </div>
-
-        {/* CARD 4: অল ডান পর্যন্ত বাকি সাপোর্ট */}
-        <div className="bg-slate-900/90 border border-slate-800/80 hover:border-amber-500/40 rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group">
-          <div className="flex items-start justify-between gap-1">
-            <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
-              বাকি সাপোর্ট
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
+            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+              isFestival ? 'bg-purple-500/10 text-purple-300 border-purple-500/30' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+            }`}>
               <Flame className="w-4 h-4" />
             </div>
           </div>
 
           <div className="my-auto">
-            <div className="text-2xl sm:text-3xl font-black text-amber-400 font-mono">
-              {pendingRequiredSupportCount} <span className="text-xs font-sans font-normal text-slate-400">টি</span>
+            <div className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight">
+              {todaysTotalLinksCount} <span className="text-xs font-normal text-slate-400">টি</span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">অল ডান এর জন্য প্রয়োজন</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">আজকের মোট কমিউনিটি পোস্ট</p>
           </div>
 
-          <button
-            onClick={() => onNavigateTab('support')}
-            className="w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[10px] rounded-lg border border-amber-500/30 transition flex items-center justify-center gap-1"
-          >
-            <span>সাপোর্ট সেসন</span>
-            <ArrowRight className="w-3 h-3" />
-          </button>
+          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400">বাকি লিংক</span>
+            <span className="text-amber-400 font-bold font-mono">
+              {pendingRequiredSupportCount} টি সাপোর্ট বাকি
+            </span>
+          </div>
         </div>
 
-        {/* CARD 5: আপনার লিংকে রিসিভড সাপোর্ট */}
-        <div className="bg-slate-900/90 border border-slate-800/80 hover:border-purple-500/40 rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group">
+        {/* CARD 3: আমার সম্পন্ন সাপোর্ট */}
+        <div className={`bg-slate-900/90 border rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group hover:scale-[1.02] duration-300 ${
+          isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80 hover:border-emerald-500/40'
+        }`}>
           <div className="flex items-start justify-between gap-1">
             <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
-              রিসিভড সাপোর্ট
+              আমার সাপোর্ট
             </span>
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
-              <UserCheck className="w-4 h-4" />
+            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+              isFestival ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            }`}>
+              <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
 
           <div className="my-auto">
-            <div className="text-2xl sm:text-3xl font-black text-purple-400 font-mono">
-              {myLinkReceivedSupportsCount} <span className="text-xs font-sans font-normal text-slate-400">জন</span>
+            <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight">
+              {mySupportedLinksCount} <span className="text-xs font-normal text-slate-400">টি</span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">আপনার লিংকে রিসিভড ক্লিক</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">আজকে সফলভাবে সম্পন্ন</p>
           </div>
 
-          <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1 text-[10px] text-purple-300 font-bold">
-            <Eye className="w-3 h-3 shrink-0" />
-            <span>রিয়েল-টাইম ক্লিক</span>
+          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400">স্ট্যাটাস</span>
+            <span className={pendingRequiredSupportCount === 0 && todaysTotalLinksCount > 0 ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+              {pendingRequiredSupportCount === 0 && todaysTotalLinksCount > 0 ? "সব সম্পন্ন ✓" : "চলমান..."}
+            </span>
           </div>
         </div>
 
-        {/* CARD 6: অল ডান স্ট্যাটাস */}
-        <div className="bg-slate-900/90 border border-slate-800/80 hover:border-indigo-500/40 rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group">
+        {/* CARD 4: আমার লিংকে আসা সাপোর্ট */}
+        <div className={`bg-slate-900/90 border rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group hover:scale-[1.02] duration-300 ${
+          isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80 hover:border-blue-500/40'
+        }`}>
           <div className="flex items-start justify-between gap-1">
             <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
-              অল ডান স্ট্যাটাস
+              প্রাপ্ত সাপোর্ট
             </span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
+              <Eye className="w-4 h-4" />
+            </div>
+          </div>
+
+          <div className="my-auto">
+            <div className="text-2xl sm:text-3xl font-black text-blue-400 font-mono tracking-tight">
+              {myLinkReceivedSupportsCount} <span className="text-xs font-normal text-slate-400">ক্লিক</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">আপনার লিংকে সাপোর্ট পড়েছে</p>
+          </div>
+
+          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400">লিংক পজিশন</span>
+            <span className="text-blue-400 font-bold font-mono">
+              {myTodayLink ? `Serial #${myTodayLink.serial_display}` : 'N/A'}
+            </span>
+          </div>
+        </div>
+
+        {/* CARD 5: All Done স্ট্যাটাস */}
+        <div className={`bg-slate-900/90 border rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group hover:scale-[1.02] duration-300 ${
+          isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80 hover:border-amber-500/40'
+        }`}>
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
+              All Done স্ট্যাটাস
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
               <Award className="w-4 h-4" />
             </div>
           </div>
 
           <div className="my-auto">
             {isAllDoneSubmittedToday ? (
-              <div className="text-emerald-400 font-bold flex items-center gap-1 text-sm sm:text-base">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>অল ডান সম্পন্ন</span>
+              <div>
+                <div className="text-sm sm:text-base font-black text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>জমা সম্পন্ন</span>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5">পয়েন্ট যুক্ত হয়েছে</p>
               </div>
             ) : (
               <div>
-                <span className="text-amber-400 font-bold text-xs sm:text-sm">পেন্ডিং</span>
-                <p className="text-[10px] text-slate-400 mt-0.5">বিকেল ৫:০০ থেকে চালু</p>
+                <div className="text-sm sm:text-base font-black text-amber-400">পেন্ডিং</div>
+                <p className="text-[10px] text-slate-400 mt-0.5">সব সাপোর্ট শেষে জমা দিন</p>
               </div>
             )}
           </div>
 
-          <button
-            onClick={() => onNavigateTab('alldone')}
-            className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10px] rounded-lg border border-slate-700 transition flex items-center justify-center gap-1"
-          >
-            <span>All Done বক্স</span>
-            <ChevronRight className="w-3 h-3" />
-          </button>
+          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400">সময়সীমা</span>
+            <span className="text-slate-300 font-mono">বিকাল ৫:০০ - রাত ১১:৫৯</span>
+          </div>
+        </div>
+
+        {/* CARD 6: একাউন্ট পয়েন্ট ও র‍্যাংক */}
+        <div className={`bg-slate-900/90 border rounded-2xl p-4 transition shadow-lg flex flex-col justify-between aspect-square relative overflow-hidden group hover:scale-[1.02] duration-300 ${
+          isFestival ? currentThemeConfig.cardBorder : 'border-slate-800/80 hover:border-cyan-500/40'
+        }`}>
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-400 leading-tight">
+              মোট পয়েন্ট
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+
+          <div className="my-auto">
+            <div className="text-2xl sm:text-3xl font-black text-amber-400 font-mono tracking-tight">
+              {currentUser.points || 0} <span className="text-xs font-normal text-slate-400">Pts</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">কমিউনিটি এক্টিভিটি পয়েন্ট</p>
+          </div>
+
+          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400">রোলের ধরন</span>
+            <span className="text-cyan-400 font-bold">{currentUser.role}</span>
+          </div>
         </div>
       </div>
 
       {/* ========================================== */}
-      {/* 🚀 QUICK NAVIGATION HUB */}
+      {/* 🚀 QUICK NAVIGATION TILES */}
       {/* ========================================== */}
-      <div className="bg-slate-900 border border-slate-800/80 rounded-3xl p-4 sm:p-6 shadow-xl space-y-3.5">
-        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-cyan-400" />
-          <span>দ্রুত নেভিগেশন সেকশনস (Quick Access Hub)</span>
-        </h3>
+      <div className="bg-slate-900/80 border border-slate-800/80 rounded-3xl p-4 sm:p-5 shadow-xl space-y-3">
+        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
+          কুইক অ্যাক্সেস মেনু
+        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <button
-            onClick={() => onNavigateTab('support')}
-            className="p-3 sm:p-4 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/50 rounded-2xl transition text-left space-y-2 group"
+            onClick={() => onNavigateTab('links')}
+            className="p-3 sm:p-4 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-cyan-500/50 rounded-2xl transition text-left space-y-2 group"
           >
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center group-hover:scale-110 transition shrink-0">
-              <Flame className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center group-hover:scale-110 transition shrink-0">
+              <LinkIcon className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white group-hover:text-amber-400 transition">Support Session</div>
-              <div className="text-[10px] text-slate-400">সব লিংক ওপেন ও সাপোর্ট করুন</div>
+              <div className="text-xs font-bold text-white group-hover:text-cyan-400 transition">Today's Links</div>
+              <div className="text-[10px] text-slate-400">সকল সাপোর্ট লিংক তালিকা</div>
             </div>
           </button>
 
@@ -514,7 +523,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
       </div>
 
       {/* 💰 BOTTOM FOOTER SPONSOR BANNER (Empty Space) */}
-      <MonetagBanner placement="home-banner" />
+      <AdSlot />
     </div>
   );
 };

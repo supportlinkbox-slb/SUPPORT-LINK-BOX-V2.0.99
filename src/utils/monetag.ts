@@ -8,6 +8,9 @@ export const MONETAG_CONFIG = {
   // Vignette & Cooldown setting
   vignetteCooldownMinutes: 5,
   
+  cooldownMs: 5 * 60_000,
+  dailyCap: 6,
+  storageKeyDaily: 'slb_monetag_daily',
   storageKeyLastAd: 'slb_monetag_last_ad_ts',
   storageKeyCustomUrl: 'slb_monetag_custom_directlink',
 };
@@ -34,17 +37,34 @@ export const setActiveMonetagLink = (url: string): void => {
   } catch {}
 };
 
-/**
- * Triggers Monetag SmartLink in a safe new tab without disturbing app state
- */
-export const triggerMonetagDirectLink = (customUrl?: string): void => {
-  const url = customUrl || getActiveMonetagLink();
-  if (!url) return;
-  
+const bdDay = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+
+export const canShowMonetag = (): boolean => {
   try {
-    localStorage.setItem(MONETAG_CONFIG.storageKeyLastAd, Date.now().toString());
+    const last = Number(localStorage.getItem(MONETAG_CONFIG.storageKeyLastAd) || 0);
+    if (Date.now() - last < MONETAG_CONFIG.cooldownMs) return false;
+    const d = JSON.parse(localStorage.getItem(MONETAG_CONFIG.storageKeyDaily) || '{}');
+    return d.day !== bdDay() || (d.count ?? 0) < MONETAG_CONFIG.dailyCap;
+  } catch {
+    return true;
+  }
+};
+
+export const triggerMonetagDirectLink = (customUrl?: string, force = false): boolean => {
+  const url = customUrl || getActiveMonetagLink();
+  if (!url || (!force && !canShowMonetag())) return false;
+  try {
+    if (new URL(url).protocol !== 'https:') return false;
+    const d = JSON.parse(localStorage.getItem(MONETAG_CONFIG.storageKeyDaily) || '{}');
+    const day = bdDay();
+    localStorage.setItem(MONETAG_CONFIG.storageKeyLastAd, String(Date.now()));
+    localStorage.setItem(
+      MONETAG_CONFIG.storageKeyDaily,
+      JSON.stringify({ day, count: d.day === day ? (d.count ?? 0) + 1 : 1 })
+    );
     window.open(url, '_blank', 'noopener,noreferrer');
-  } catch (err) {
-    console.warn('Could not open Monetag link:', err);
+    return true;
+  } catch {
+    return false;
   }
 };
