@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Sparkles,
   ArrowRight,
-  Film,
   ChevronRight,
   UserCheck,
   Eye,
@@ -467,7 +466,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           কুইক অ্যাক্সেস মেনু
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <button
             onClick={() => onNavigateTab('links')}
             className="p-3 sm:p-4 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-cyan-500/50 rounded-2xl transition text-left space-y-2 group"
@@ -491,19 +490,6 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             <div>
               <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition">All Done Box</div>
               <div className="text-[10px] text-slate-400">সাপোর্ট শেষে অল ডান জমা দিন</div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('movies')}
-            className="p-3 sm:p-4 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-purple-500/50 rounded-2xl transition text-left space-y-2 group"
-          >
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center group-hover:scale-110 transition shrink-0">
-              <Film className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white group-hover:text-purple-400 transition">Movie Lover Zone</div>
-              <div className="text-[10px] text-slate-400">মুভি দেখুন ও রিকোয়েস্ট করুন</div>
             </div>
           </button>
 

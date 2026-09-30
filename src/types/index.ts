@@ -409,44 +409,6 @@ export interface MemberHistoryItem {
   metadata?: Record<string, any>;
 }
 
-export type MediaType = 'MOVIE' | 'VIDEO' | 'TUTORIAL' | 'TRAINING' | 'OTHER';
-export type MediaStatus = 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED' | 'ARCHIVED';
-export type MediaVisibility = 'COMMUNITY' | 'ADMINS_ONLY' | 'PRIVATE';
-
-export interface MediaItem {
-  id: string;
-  community_id: string;
-  title: string;
-  description?: string;
-  media_type: MediaType;
-  category: string;
-  storage_bucket?: string;
-  storage_path?: string;
-  external_url?: string;
-  thumbnail_path?: string;
-  duration_seconds?: number;
-  status: MediaStatus;
-  visibility: MediaVisibility;
-  is_featured: boolean;
-  sort_order: number;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface MovieAccessToken {
-  id: string;
-  token_hash: string;
-  member_id: string;
-  community_id: string;
-  media_id: string;
-  resolution: string;
-  expires_at: string;
-  used_at?: string;
-  revoked_at?: string;
-  created_at: string;
-}
-
 export type PeriodType = 'WEEKLY' | 'MONTHLY';
 export type QualificationStatus = 'QUALIFIED' | 'DISQUALIFIED';
 export type RewardStatus = 'NONE' | 'ELIGIBLE' | 'CLAIMED' | 'PUBLISHED';
@@ -517,52 +479,6 @@ export interface AdminSupportContact {
   whatsapp_number?: string;
   helpline_note?: string;
   is_active: boolean;
-  updated_at: string;
-}
-
-export type MovieStatus = 'Draft' | 'Published' | 'Hidden' | 'Archived';
-
-export interface MovieItem {
-  id: string;
-  title: string;
-  release_year: string;
-  category: 'Movie' | 'Web Series' | 'Drama' | 'Short Film';
-  poster_url: string;
-  description?: string;
-  language?: string;
-  quality?: string;
-  status: MovieStatus;
-  resolutions: {
-    res_480p?: string;
-    res_720p?: string;
-    res_1080p?: string;
-  };
-  pixeldrain_url?: string;
-  gdflex_url?: string;
-  created_at: string;
-  created_by?: string;
-}
-
-export type MovieRequestStatus =
-  | 'PENDING'
-  | 'REVIEWING'
-  | 'APPROVED'
-  | 'ADDED'
-  | 'REJECTED'
-  | 'ALREADY_AVAILABLE'
-  | 'CANCELLED';
-
-export interface MovieRequest {
-  id: string;
-  member_id: string;
-  member_name: string;
-  member_number: string;
-  movie_title: string;
-  release_year: string;
-  thumbnail_url?: string;
-  status: MovieRequestStatus;
-  admin_notes?: string;
-  created_at: string;
   updated_at: string;
 }
 

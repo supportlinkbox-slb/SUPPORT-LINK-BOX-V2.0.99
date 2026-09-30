@@ -14,7 +14,6 @@ import {
   Settings,
   Flame,
   ExternalLink,
-  Film,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatToBDT } from '../../utils/bangladeshTime';
@@ -80,7 +79,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'support', label: 'Support Link Box', icon: Flame, badge: pendingRequiredSupportCount > 0 ? pendingRequiredSupportCount : null },
     { id: 'alldone', label: 'All Done Box', icon: CheckCircle2, status: isAllDoneSubmittedToday },
     { id: 'leaderboard', label: 'লিডারবোর্ড', icon: Award },
-    { id: 'entertainment', label: 'মুভি লাভার', icon: Film },
     { id: 'notices', label: 'নোটিশ বোর্ড', icon: AlertTriangle },
     { id: 'reports', label: 'রিপোর্ট', icon: ShieldAlert },
   ];

@@ -376,7 +376,7 @@ export const AdminSettingsPanel: React.FC = () => {
                     <span>Direct Link URL</span>
                   </div>
                   <p className="text-slate-300 leading-relaxed">
-                    এই লিংকটি মুভি খোলার সময় এবং রিকভারি ধাপে ব্যবহৃত হবে।
+                    এই লিংকটি অ্যাকাউন্ট রিকভারি ধাপে ব্যবহৃত হবে।
                   </p>
                 </div>
 

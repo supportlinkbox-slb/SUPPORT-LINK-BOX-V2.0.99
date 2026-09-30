@@ -1750,24 +1750,5 @@ export const lifecycleApi = {
   },
 };
 
-/**
- * MEDIA DRM STREAM GATEWAY API (Chapter 22 & Section 45)
- */
-export const mediaApi = {
-  async getObfuscatedMediaStream(mediaId: string, resolution: string): Promise<ApiResponse<any>> {
-    try {
-      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
-      const { data, error } = await supabase.rpc('get_obfuscated_media_stream', {
-        p_media_id: mediaId,
-        p_resolution: resolution,
-      });
-      if (error) return { success: false, error: formatSupabaseError(error) };
-      return { success: true, data };
-    } catch (err: any) {
-      return { success: false, error: formatSupabaseError(err) };
-    }
-  },
-};
-
 
 

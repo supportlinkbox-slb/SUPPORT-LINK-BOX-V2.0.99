@@ -25,7 +25,6 @@ import {
   Info,
   UserPlus,
   Settings,
-  Film,
   Bell,
   PlusCircle,
   Sparkles,
@@ -38,7 +37,6 @@ import { formatToBDT } from '../../utils/bangladeshTime';
 import { AdminInviteMember } from './AdminInviteMember';
 import { AdminInviteList } from './AdminInviteList';
 import { AdminSettingsPanel } from './AdminSettingsPanel';
-import { MovieLoverAdmin } from './MovieLoverAdmin';
 import { AdminNoticeGeneratorModal } from './AdminNoticeGeneratorModal';
 import { LinkSubmissionModal } from '../member/LinkSubmissionModal';
 import { FestivalThemeManagerModal } from './FestivalThemeManagerModal';
@@ -61,7 +59,7 @@ export const AdminDashboard: React.FC = () => {
     verifyFakeAllDone,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'TODAYS_LINKS' | 'SUPPORT_MATRIX' | 'OVERVIEW' | 'INVITE' | 'SETTINGS' | 'MOVIE_LOVER'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'TODAYS_LINKS' | 'SUPPORT_MATRIX' | 'OVERVIEW' | 'INVITE' | 'SETTINGS'>('REQUESTS');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -295,7 +293,7 @@ export const AdminDashboard: React.FC = () => {
           <span className="text-[10px] text-cyan-400 font-mono">SELECT MODULE</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3">
           {/* Module 1: Requests */}
           <button
             onClick={() => setActiveTab('REQUESTS')}
@@ -444,26 +442,6 @@ export const AdminDashboard: React.FC = () => {
             <div>
               <div className="text-xs font-black truncate">সেটিংস</div>
               <div className="text-[10px] text-slate-400 truncate">সিস্টেম কনফিগ</div>
-            </div>
-          </button>
-
-          {/* Module 8: Movie Lover */}
-          <button
-            onClick={() => setActiveTab('MOVIE_LOVER')}
-            className={`p-3 rounded-2xl text-left transition-all border relative overflow-hidden flex flex-col justify-between space-y-2 group ${
-              activeTab === 'MOVIE_LOVER'
-                ? 'bg-gradient-to-br from-purple-950 via-slate-900 to-slate-900 border-purple-500 text-white shadow-lg shadow-purple-500/20 ring-1 ring-purple-500/50'
-                : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className={`p-2 rounded-xl transition ${activeTab === 'MOVIE_LOVER' ? 'bg-purple-500 text-white font-bold' : 'bg-slate-800 text-purple-400 group-hover:bg-slate-700'}`}>
-                <Film className="w-4 h-4" />
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-black truncate">মুভি লাভার</div>
-              <div className="text-[10px] text-slate-400 truncate">মুভি ও সিকিউরিটি</div>
             </div>
           </button>
         </div>
@@ -987,9 +965,6 @@ export const AdminDashboard: React.FC = () => {
 
       {/* TAB 5: SYSTEM SETTINGS PANEL */}
       {activeTab === 'SETTINGS' && <AdminSettingsPanel />}
-
-      {/* TAB 6: MOVIE LOVER SYSTEM */}
-      {activeTab === 'MOVIE_LOVER' && <MovieLoverAdmin />}
 
       {/* Member Details Modal */}
       {isDetailsOpen && selectedMember && (
