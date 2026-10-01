@@ -27,6 +27,23 @@ serve(async (req) => {
   }
 
   try {
+    // Verify BDT time window or authorization header (prevent premature cutoff pings)
+    const bdtNow = new Date(Date.now() + 6 * 3600 * 1000);
+    const bdtHour = bdtNow.getUTCHours();
+    const authHeader = req.headers.get("Authorization");
+    const isCronAuthorized = Boolean(authHeader && (authHeader.includes("Bearer") || authHeader.includes("cron")));
+
+    if (bdtHour < 10 && !isCronAuthorized) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "CUTOFF_WINDOW_NOT_REACHED: 10:00 AM BDT cutoff window has not arrived yet.",
+          current_bdt_hour: bdtHour,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+
     // 1. Call authoritative database RPC
     const { data: rpcResult, error: rpcErr } = await supabase.rpc("cron_bdt_10am_recovery_cutoff");
 

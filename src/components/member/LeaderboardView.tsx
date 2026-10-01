@@ -1,18 +1,38 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Trophy, Award, Medal, Crown, Calendar, Sparkles, AlertCircle, Search, Flame } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { pointsApi } from '../../lib/supabase';
+import { MemberProfile } from '../../types';
 
 export const LeaderboardView: React.FC = () => {
   const { members } = useApp();
+  const [fetchedMembers, setFetchedMembers] = useState<MemberProfile[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const [period, setPeriod] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ALL_TIME' | 'HISTORICAL'>('WEEKLY');
   const [selectedWeek, setSelectedWeek] = useState<string>('Week 52 (Current)');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  useEffect(() => {
+    if (members && members.length > 0) {
+      setFetchedMembers(members);
+    } else {
+      setLoading(true);
+      const apiPeriod = period === 'HISTORICAL' ? 'WEEKLY' : period;
+      pointsApi.getLeaderboardRankings(apiPeriod).then((res) => {
+        if (res.success && res.data) {
+          setFetchedMembers(res.data as MemberProfile[]);
+        }
+        setLoading(false);
+      });
+    }
+  }, [members, period]);
+
   // Filter out frozen members for active leaderboard rankings
   const activeMembers = useMemo(() => {
-    return members.filter((m) => m.status !== 'FROZEN');
-  }, [members]);
+    const sourceList = members && members.length > 0 ? members : fetchedMembers;
+    return sourceList.filter((m) => m.status !== 'FROZEN');
+  }, [members, fetchedMembers]);
 
   // Compute lists for each period
   const displayList = useMemo(() => {

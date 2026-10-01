@@ -135,6 +135,7 @@ export const authApi = {
     profilePhotoUrl?: string;
     facebookIdentityKey?: string;
     facebookIdentityType?: 'numeric_id' | 'username';
+    tokenHash?: string;
   }): Promise<
     ApiResponse<{ user: any; session: any; needsEmailConfirmation: boolean }>
   > {
@@ -188,6 +189,15 @@ export const authApi = {
           success: false,
           error: 'এই Email দিয়ে আগে থেকেই একটি Account রয়েছে।',
         };
+      }
+
+      // 3. If an invite token hash was provided, consume it atomically before session purge
+      if (params.tokenHash) {
+        try {
+          await supabase.rpc('consume_invite_token_tx', { p_token_hash: params.tokenHash });
+        } catch (consumeErr) {
+          console.warn('Invite token consume warning:', consumeErr);
+        }
       }
 
       // CRITICAL SECURITY ENFORCEMENT: Always sign out immediately after registration.
@@ -264,16 +274,26 @@ export const authApi = {
       if (!sessionData) {
         let targetEmail = trimmedId.toLowerCase();
         if (!trimmedId.includes('@')) {
-          const { data: member } = await supabase
-            .from('members')
-            .select('email')
-            .ilike('member_number', trimmedId)
-            .maybeSingle();
+          // Use secure RPC to resolve member email by member number without needing wide table SELECT
+          const { data: resolvedEmail } = await supabase.rpc('resolve_member_email_by_number', {
+            p_member_number: trimmedId,
+          });
 
-          if (!member || !member.email) {
-            return { success: false, error: 'ভুল Email/Member ID অথবা Password।' };
+          if (resolvedEmail && typeof resolvedEmail === 'string') {
+            targetEmail = resolvedEmail.toLowerCase().trim();
+          } else {
+            // Direct query attempt if RPC not available
+            const { data: member } = await supabase
+              .from('members')
+              .select('email')
+              .ilike('member_number', trimmedId)
+              .maybeSingle();
+
+            if (!member || !member.email) {
+              return { success: false, error: 'ভুল Email/Member ID অথবা Password।' };
+            }
+            targetEmail = member.email.toLowerCase().trim();
           }
-          targetEmail = member.email.toLowerCase().trim();
         }
 
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -1447,9 +1467,36 @@ export const pointsApi = {
   async getDailyLeaderboard(date: string): Promise<ApiResponse<any[]>> {
     try {
       if (!isSupabaseConfigured) return { success: true, data: [] };
-      const { data, error } = await supabase.rpc('get_daily_leaderboard_secure', { p_date: date });
+      const { data, error } = await supabase.rpc('get_daily_leaderboard_secure', {
+        p_period: 'DAILY',
+        p_date: date,
+      });
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async getLeaderboardRankings(period: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ALL_TIME' = 'WEEKLY', date?: string): Promise<ApiResponse<any[]>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: [] };
+      const { data, error } = await supabase.rpc('get_daily_leaderboard_secure', {
+        p_period: period,
+        p_date: date || (new Date().toISOString().slice(0, 10)),
+      });
+      if (error) {
+        // Fallback: Query safe public columns for active members
+        const { data: membersData, error: mErr } = await supabase
+          .from('members')
+          .select('id, name, member_number, profile_photo_url, role, status, points, weekly_points, monthly_points, daily_points, total_links_submitted, total_supports_given, total_all_done')
+          .eq('status', 'ACTIVE')
+          .order(period === 'WEEKLY' ? 'weekly_points' : period === 'MONTHLY' ? 'monthly_points' : period === 'DAILY' ? 'daily_points' : 'points', { ascending: false })
+          .limit(100);
+        if (mErr) return { success: false, error: formatSupabaseError(mErr) };
+        return { success: true, data: membersData || [] };
+      }
+      return { success: true, data: data || [] };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }

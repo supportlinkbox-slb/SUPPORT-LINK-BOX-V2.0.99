@@ -30,8 +30,17 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { batch_id, source_table, period_start, period_end, community_id } = body;
 
+    const ALLOWED_TABLES = ["daily_links", "all_done", "audit_logs", "support_records", "point_transactions"];
+    let rawTable = source_table || "daily_links";
+    if (!ALLOWED_TABLES.includes(rawTable)) {
+      return new Response(
+        JSON.stringify({ success: false, error: `FORBIDDEN_TABLE: Table '${rawTable}' cannot be exported.` }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     let targetBatchId = batch_id;
-    let targetTable = source_table || "daily_links";
+    let targetTable = rawTable;
     let start = period_start;
     let end = period_end;
     let commId = community_id || "main";

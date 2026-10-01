@@ -994,6 +994,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           profilePhotoUrl: data.profilePhotoUrl,
           facebookIdentityKey: data.facebookIdentityKey,
           facebookIdentityType: data.facebookIdentityType,
+          tokenHash: data.tokenHash,
         });
 
         if (!res.success) {
