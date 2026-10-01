@@ -77,6 +77,14 @@ export const LinkSubmissionModal: React.FC<LinkSubmissionModalProps> = ({
       return;
     }
 
+    // Client-side instant duplicate pre-check for today
+    const normalizedNewLink = fbLink.trim().toLowerCase();
+    const isDuplicate = dailyLinks.some(l => l.fb_link.trim().toLowerCase() === normalizedNewLink);
+    if (isDuplicate) {
+      setErrorMessage('এই ফেসবুক লিংকটি আজকের তালিকায় ইতোমধ্যে জমা দেওয়া হয়েছে। ডুপ্লিকেট লিংক গ্রহণযোগ্য নয়।');
+      return;
+    }
+
     setLoading(true);
     const result = await submitDailyLink({
       post_type: postType,

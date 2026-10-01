@@ -336,7 +336,7 @@ INSERT INTO public.communities (id, name, description)
 VALUES ('main', 'Support Link Box Official', 'Primary community partition')
 ON CONFLICT (id) DO NOTHING;
 
-DO 1270 
+DO $$ 
 BEGIN
     ALTER TABLE IF EXISTS public.settings DROP CONSTRAINT IF EXISTS settings_community_id_key;
     IF EXISTS (
@@ -363,6 +363,6 @@ BEGIN
     END IF;
 EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'Seed settings completed with legacy fallback.';
-END 1270;
+END $$;
 
 -- END OF PART 3

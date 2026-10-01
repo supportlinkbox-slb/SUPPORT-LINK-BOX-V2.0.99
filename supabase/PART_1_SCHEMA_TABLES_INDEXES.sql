@@ -488,7 +488,7 @@ ALTER TABLE IF EXISTS public.alt_id_disclosures ADD COLUMN IF NOT EXISTS member_
 
 -- Settings guarantees & legacy constraint cleanup
 ALTER TABLE IF EXISTS public.settings DROP CONSTRAINT IF EXISTS settings_community_id_key;
-DO 1248 
+DO $$ 
 BEGIN
     IF EXISTS (
         SELECT 1 FROM information_schema.columns 
@@ -497,7 +497,7 @@ BEGIN
         ALTER TABLE public.settings ALTER COLUMN community_id DROP NOT NULL;
         ALTER TABLE public.settings ALTER COLUMN community_id DROP DEFAULT;
     END IF;
-END 1248;
+END $$;
 
 ALTER TABLE IF EXISTS public.settings ADD COLUMN IF NOT EXISTS key VARCHAR(100);
 ALTER TABLE IF EXISTS public.settings ADD COLUMN IF NOT EXISTS value JSONB;

@@ -378,9 +378,9 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
 
                     <button
                       onClick={() => {
-                        openFacebookPostExternally(link.facebook_url);
+                        openFacebookPostExternally(link.fb_link);
                         if (!isOwnLink && !isSupported) {
-                          supportLink(link.id);
+                          supportLink(link);
                         }
                       }}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm ${

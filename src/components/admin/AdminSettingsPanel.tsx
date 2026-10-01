@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Clock,
@@ -47,6 +47,8 @@ export const AdminSettingsPanel: React.FC = () => {
     activeFestivalTheme,
     currentThemeConfig,
     setActiveFestivalThemeState,
+    systemConfig,
+    updateSystemSettings,
   } = useApp();
 
   const isDev = currentUser?.role === 'DEVELOPER';
@@ -55,29 +57,48 @@ export const AdminSettingsPanel: React.FC = () => {
 
   // System Settings State
   const [settings, setSettings] = useState<SystemSettings>({
-    submission_start_time: '00:00',
-    submission_end_time: '16:50',
-    all_done_start_time: '17:00',
-    all_done_deadline_time: '23:59',
+    submission_start_time: systemConfig?.submission_start_time || '00:00',
+    submission_end_time: systemConfig?.submission_end_time || '16:50',
+    all_done_start_time: systemConfig?.all_done_start_time || '17:00',
+    all_done_deadline_time: systemConfig?.all_done_deadline_time || '23:59',
     late_support_weekly_limit: 2,
     can_submit_links_global: true,
     maintenance_mode: false,
   });
 
+  useEffect(() => {
+    if (systemConfig) {
+      setSettings((prev) => ({
+        ...prev,
+        submission_start_time: systemConfig.submission_start_time || prev.submission_start_time,
+        submission_end_time: systemConfig.submission_end_time || prev.submission_end_time,
+        all_done_start_time: systemConfig.all_done_start_time || prev.all_done_start_time,
+        all_done_deadline_time: systemConfig.all_done_deadline_time || prev.all_done_deadline_time,
+      }));
+    }
+  }, [systemConfig]);
+
   // Admin Contact Profiles State
-  const [adminContact, setAdminContact] = useState<AdminSupportContact>({
-    id: `contact-${currentUser?.id || 'admin'}`,
-    admin_id: currentUser?.id || '',
-    admin_name: currentUser?.name || 'Admin Support',
-    admin_role: currentUser?.role || 'ADMIN',
-    facebook_url: currentUser?.facebook_url || '',
-    whatsapp_number: '+8801700000000',
-    helpline_note: 'যেকোনো একাউন্ট সমস্যা বা পেন্ডিং এপ্রুভালের জন্য ফেসবুক/হোয়াটসঅ্যাপে যোগাযোগ করুন।',
-    is_active: true,
-    updated_at: new Date().toISOString(),
+  const [adminContact, setAdminContact] = useState<AdminSupportContact>(() => {
+    try {
+      const saved = localStorage.getItem('slb_admin_contact');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      id: `contact-${currentUser?.id || 'admin'}`,
+      admin_id: currentUser?.id || '',
+      admin_name: currentUser?.name || 'Admin Support',
+      admin_role: currentUser?.role || 'ADMIN',
+      facebook_url: currentUser?.facebook_url || '',
+      whatsapp_number: '+8801700000000',
+      helpline_note: 'যেকোনো একাউন্ট সমস্যা বা পেন্ডিং এপ্রুভালের জন্য ফেসবুক/হোয়াটসঅ্যাপে যোগাযোগ করুন।',
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    };
   });
 
   const [isSavedNotice, setIsSavedNotice] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [selectedInactivityDays, setSelectedInactivityDays] = useState<3 | 7>(3);
   const [isNoticeGeneratorOpen, setIsNoticeGeneratorOpen] = useState(false);
@@ -137,10 +158,37 @@ export const AdminSettingsPanel: React.FC = () => {
     return days >= selectedInactivityDays;
   });
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSavedNotice(true);
-    setTimeout(() => setIsSavedNotice(false), 3000);
+    setIsSaving(true);
+    try {
+      const res = await updateSystemSettings({
+        submission_start_time: settings.submission_start_time,
+        submission_end_time: settings.submission_end_time,
+        all_done_start_time: settings.all_done_start_time,
+        all_done_deadline_time: settings.all_done_deadline_time,
+      });
+      if (res.success) {
+        setIsSavedNotice(true);
+        setTimeout(() => setIsSavedNotice(false), 3000);
+      } else {
+        alert(res.error || 'সেটিংস আপডেট করতে ব্যর্থ হয়েছে।');
+      }
+    } catch (err: any) {
+      alert(err.message || 'সেটিংস সেভ করতে ব্যর্থ হয়েছে।');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveContact = () => {
+    try {
+      localStorage.setItem('slb_admin_contact', JSON.stringify(adminContact));
+      setIsSavedNotice(true);
+      setTimeout(() => setIsSavedNotice(false), 3000);
+    } catch (err) {
+      alert('হেল্পলাইন তথ্য সেভ করতে সমস্যা হয়েছে।');
+    }
   };
 
   const handleAssignSpecialDuty = async (memberId: string) => {
@@ -280,10 +328,11 @@ export const AdminSettingsPanel: React.FC = () => {
                   </div>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow"
+                    disabled={isSaving}
+                    className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow disabled:opacity-50"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>সেভ</span>
+                    <span>{isSaving ? 'সংরক্ষণ হচ্ছে...' : 'সেভ'}</span>
                   </button>
                 </div>
 
@@ -503,13 +552,11 @@ export const AdminSettingsPanel: React.FC = () => {
                   <h2 className="text-sm font-bold text-white">এডমিন সাপোর্ট হেল্পলাইন</h2>
                 </div>
                 <button
-                  onClick={() => {
-                    setIsSavedNotice(true);
-                    setTimeout(() => setIsSavedNotice(false), 3000);
-                  }}
-                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow"
+                  onClick={handleSaveContact}
+                  disabled={isSaving}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow disabled:opacity-50"
                 >
-                  সেভ
+                  {isSaving ? 'সংরক্ষণ হচ্ছে...' : 'সেভ'}
                 </button>
               </div>
 

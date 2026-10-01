@@ -421,7 +421,7 @@ $$;
 
 -- GRANT EXECUTE ON RPCS
 GRANT EXECUTE ON FUNCTION public.verify_invite_token(TEXT) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.secure_login_check(TEXT, TEXT) TO anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.secure_login_check(TEXT, TEXT) FROM anon, PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_invite_token_tx(TEXT, UUID) FROM PUBLIC;
 
 -- High-performance paginated members fetch RPC

@@ -267,10 +267,24 @@ interface AppContextType {
     details: string
   ) => Promise<void>;
 
+  // System Settings Update
+  updateSystemSettings: (updates: Partial<SystemConfig>) => Promise<{ success: boolean; error?: string }>;
+
   // Festival Theme System (Admin-Controlled & Time-Bound)
   activeFestivalTheme: ActiveThemeState;
   currentThemeConfig: FestivalThemeConfig;
   setActiveFestivalThemeState: (themeState: ActiveThemeState) => void;
+}
+
+function safeJsonParse<T>(key: string, fallback: T): T {
+  try {
+    const saved = localStorage.getItem(key);
+    if (!saved) return fallback;
+    return JSON.parse(saved);
+  } catch (e) {
+    console.warn(`Failed to parse localStorage key "${key}":`, e);
+    return fallback;
+  }
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -283,8 +297,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const isRegisteringRef = useRef<boolean>(false);
   const [members, setMembers] = useState<MemberProfile[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_members');
-    return saved ? JSON.parse(saved) : SEED_MEMBERS;
+    return safeJsonParse('slb_members', SEED_MEMBERS);
   });
 
   const [currentUser, setCurrentUser] = useState<MemberProfile | null>(null);
@@ -293,49 +306,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [dailyLinks, setDailyLinks] = useState<DailyLink[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_daily_links');
-    return saved ? JSON.parse(saved) : SEED_DAILY_LINKS;
+    return safeJsonParse('slb_daily_links', SEED_DAILY_LINKS);
   });
 
   const [supportedLinkIds, setSupportedLinkIds] = useState<Set<string>>(() => {
     if (isSupabaseConfigured) return new Set();
-    const saved = localStorage.getItem(`slb_supported_${todayDate}_${currentUser?.id || 'guest'}`);
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    const arr = safeJsonParse<string[]>(`slb_supported_${todayDate}_${currentUser?.id || 'guest'}`, []);
+    return new Set(arr);
   });
 
   const [allDoneRecords, setAllDoneRecords] = useState<AllDoneRecord[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_all_done_records');
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse('slb_all_done_records', []);
   });
 
   const [pointLedger, setPointLedger] = useState<PointTransaction[]>(() => {
-    const saved = localStorage.getItem('slb_point_ledger');
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse('slb_point_ledger', []);
   });
 
   const [reports, setReports] = useState<LinkReport[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_reports');
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse('slb_reports', []);
   });
 
   const [scheduledLinks, setScheduledLinks] = useState<ScheduledLink[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_scheduled_links');
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse('slb_scheduled_links', []);
   });
 
   const [notices, setNotices] = useState<NoticeItem[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_notices');
-    return saved ? JSON.parse(saved) : SEED_NOTICES;
+    return safeJsonParse('slb_notices', SEED_NOTICES);
   });
 
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_notifications');
-    return saved ? JSON.parse(saved) : SEED_NOTIFICATIONS;
+    return safeJsonParse('slb_notifications', SEED_NOTIFICATIONS);
   });
 
   const unreadNotificationCount = useMemo(() => {
@@ -347,14 +353,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [punishments, setPunishments] = useState<PunishmentRecord[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_punishments');
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse('slb_punishments', []);
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
     if (isSupabaseConfigured) return [];
-    const saved = localStorage.getItem('slb_audit_logs');
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse('slb_audit_logs', []);
   });
   const [pendingReviews, setPendingReviews] = useState<any[]>([]);
 
@@ -492,7 +496,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isSupabaseConfigured) return;
 
     try {
-      const [linksRes, allDoneRes, noticesRes, auditRes, schedRes, pendingReviewsRes, reportsRes, themeRes] = await Promise.all([
+      const [linksRes, allDoneRes, noticesRes, auditRes, schedRes, pendingReviewsRes, reportsRes, themeRes, settingsRes] = await Promise.all([
         dailyLinksApi.getTodayLinks(todayDate),
         allDoneApi.getTodayAllDone(todayDate),
         configApi.getNotices(),
@@ -501,6 +505,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         allDoneAdminApi.getPendingReviews(),
         reportsApi.fetchReportsPaginated({ page: 1, pageSize: 50 }),
         configApi.getActiveFestivalTheme(),
+        configApi.getSettings(),
       ]);
 
       if (linksRes.success && linksRes.data) setDailyLinks(linksRes.data);
@@ -510,6 +515,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (schedRes.success && schedRes.data) setScheduledLinks(schedRes.data);
       if (pendingReviewsRes.success && pendingReviewsRes.data) setPendingReviews(pendingReviewsRes.data);
       if (reportsRes.success && reportsRes.data?.reports) setReports(reportsRes.data.reports);
+      if (settingsRes?.success && settingsRes.data) setSystemConfig(settingsRes.data);
       if (themeRes?.success && themeRes.data) {
         if (themeRes.data.isActive && themeRes.data.expiresAt) {
           const isExpired = new Date(themeRes.data.expiresAt).getTime() <= Date.now();
@@ -1078,6 +1084,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     setCurrentUser(null);
     setSupportedLinkIds(new Set());
+    setNotifications([]);
+    setReports([]);
+    setScheduledLinks([]);
+    setPendingReviews([]);
+    setMembers([]);
+    setAuditLogs([]);
+  };
+
+  const updateSystemSettings = async (
+    updates: Partial<SystemConfig>
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'অনুমতি নেই। কেবল এডমিন সেটিংস পরিবর্তন করতে পারেন।' };
+    }
+    const res = await configApi.updateSettings(updates);
+    if (res.success && res.data) {
+      setSystemConfig(res.data);
+      addAuditLog('SETTINGS_UPDATED', 'SYSTEM', 'default', `Updated system configuration parameters`);
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'সেটিংস আপডেট করতে ব্যর্থ হয়েছে।' };
   };
 
   const resetPassword = async (email: string) => {
@@ -2562,84 +2589,113 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
+  const contextValue = useMemo<AppContextType>(() => ({
+    isConfigured: isSupabaseConfigured,
+    systemConfig,
+    todayDate,
+    submissionStatus,
+    allDoneStatus,
+    currentUser,
+    isAuthenticated: Boolean(currentUser),
+    authLoading,
+    authReady,
+    login,
+    register,
+    logout,
+    resetPassword,
+    updatePassword,
+    dailyLinks,
+    submitDailyLink,
+    editDailyLink,
+    deleteDailyLink,
+    scheduledLinks,
+    createScheduledLink,
+    editScheduledLink,
+    cancelScheduledLink,
+    executeDueScheduledLinks,
+    supportedLinkIds,
+    supportLink,
+    isLinkSupported,
+    canSupportLink,
+    currentSupportLinkIndex,
+    setCurrentSupportLinkIndex,
+    pendingRequiredSupportCount,
+    allDoneRecords,
+    isAllDoneSubmittedToday,
+    userAllDoneRecord,
+    submitAllDone,
+    pointLedger,
+    reports,
+    submitReport,
+    updateReportStatus,
+    sendReportMessage,
+    notices,
+    addNotice,
+    deleteNotice,
+    generateNotice,
+    bulkGenerateNotices,
+    revokeNotice,
+    notifications,
+    unreadNotificationCount,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    punishments,
+    activePenalty,
+    verifyFakeAllDone,
+    resolvePunishment,
+    members,
+    fetchPaginatedMembers,
+    updateMemberRole,
+    updateMemberStatus,
+    approveMember,
+    rejectMember,
+    adminRestoreMember,
+    updateMemberProfile,
+    getDailyLeaderboard,
+    getMemberPointHistory,
+    pendingReviews,
+    getPendingReviews,
+    confirmFakeAllDone,
+    createReportReply,
+    addAuditLog,
+    auditLogs,
+    refreshData,
+    updateSystemSettings,
+    activeFestivalTheme,
+    currentThemeConfig,
+    setActiveFestivalThemeState,
+  }), [
+    systemConfig,
+    todayDate,
+    submissionStatus,
+    allDoneStatus,
+    currentUser,
+    authLoading,
+    authReady,
+    dailyLinks,
+    scheduledLinks,
+    supportedLinkIds,
+    currentSupportLinkIndex,
+    pendingRequiredSupportCount,
+    allDoneRecords,
+    isAllDoneSubmittedToday,
+    userAllDoneRecord,
+    pointLedger,
+    reports,
+    notices,
+    notifications,
+    unreadNotificationCount,
+    punishments,
+    activePenalty,
+    members,
+    pendingReviews,
+    auditLogs,
+    activeFestivalTheme,
+    currentThemeConfig,
+  ]);
+
   return (
-    <AppContext.Provider
-      value={{
-        isConfigured: isSupabaseConfigured,
-        systemConfig,
-        todayDate,
-        submissionStatus,
-        allDoneStatus,
-        currentUser,
-        isAuthenticated: Boolean(currentUser),
-        authLoading,
-        authReady,
-        login,
-        register,
-        logout,
-        resetPassword,
-        updatePassword,
-        dailyLinks,
-        submitDailyLink,
-        editDailyLink,
-        deleteDailyLink,
-        scheduledLinks,
-        createScheduledLink,
-        editScheduledLink,
-        cancelScheduledLink,
-        executeDueScheduledLinks,
-        supportedLinkIds,
-        supportLink,
-        isLinkSupported,
-        canSupportLink,
-        currentSupportLinkIndex,
-        setCurrentSupportLinkIndex,
-        pendingRequiredSupportCount,
-        allDoneRecords,
-        isAllDoneSubmittedToday,
-        userAllDoneRecord,
-        submitAllDone,
-        pointLedger,
-        reports,
-        submitReport,
-        updateReportStatus,
-        sendReportMessage,
-        notices,
-        addNotice,
-        deleteNotice,
-        generateNotice,
-        bulkGenerateNotices,
-        revokeNotice,
-        notifications,
-        unreadNotificationCount,
-        markNotificationAsRead,
-        markAllNotificationsAsRead,
-        punishments,
-        activePenalty,
-        verifyFakeAllDone,
-        resolvePunishment,
-        members,
-        fetchPaginatedMembers,
-        updateMemberRole,
-        updateMemberStatus,
-        approveMember,
-        rejectMember,
-        adminRestoreMember,
-        updateMemberProfile,
-        getDailyLeaderboard,
-        getMemberPointHistory,
-        pendingReviews,
-        getPendingReviews,
-        confirmFakeAllDone,
-        createReportReply,
-        addAuditLog,
-        auditLogs,
-        refreshData,
-        activeFestivalTheme,
-        currentThemeConfig,
-        setActiveFestivalThemeState,
-      }}
-    >
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

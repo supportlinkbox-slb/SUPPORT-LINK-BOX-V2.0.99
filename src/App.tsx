@@ -1,22 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { HomeDashboardView } from './components/member/HomeDashboardView';
-import { DailyLinksView } from './components/member/DailyLinksView';
 import { PlaylistSupportSession } from './components/member/PlaylistSupportSession';
 import { AllDoneSection } from './components/alldone/AllDoneSection';
-import { LeaderboardView } from './components/member/LeaderboardView';
-import { NoticeSection } from './components/announcements/NoticeSection';
-import { ReportsAdminView } from './components/admin/ReportsAdminView';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { MemberProfileView } from './components/member/MemberProfileView';
 import { SpecialSupportDutyBanner } from './components/member/SpecialSupportDutyBanner';
-import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { StatusGateScreen } from './components/auth/StatusGateScreen';
 import { BottomNavBar } from './components/layout/BottomNavBar';
-import { FestivalWelcomeModal } from './components/common/FestivalWelcomeModal';
-import { Flame, CheckCircle2, Shield, Heart } from 'lucide-react';
+import { Flame, CheckCircle2, Shield, Heart, Loader2 } from 'lucide-react';
+
+// Lazy-loaded routes and heavy components for optimized initial bundle
+const LeaderboardView = lazy(() => import('./components/member/LeaderboardView').then(m => ({ default: m.LeaderboardView })));
+const NoticeSection = lazy(() => import('./components/announcements/NoticeSection').then(m => ({ default: m.NoticeSection })));
+const ReportsAdminView = lazy(() => import('./components/admin/ReportsAdminView').then(m => ({ default: m.ReportsAdminView })));
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const MemberProfileView = lazy(() => import('./components/member/MemberProfileView').then(m => ({ default: m.MemberProfileView })));
+const LinkSubmissionModal = lazy(() => import('./components/member/LinkSubmissionModal').then(m => ({ default: m.LinkSubmissionModal })));
+const FestivalWelcomeModal = lazy(() => import('./components/common/FestivalWelcomeModal').then(m => ({ default: m.FestivalWelcomeModal })));
+
+const ViewFallback: React.FC = () => (
+  <div className="py-24 flex flex-col items-center justify-center space-y-3">
+    <div className="w-8 h-8 rounded-full border-2 border-cyan-500/20 border-t-cyan-500 animate-spin" />
+    <span className="text-xs text-slate-400">মডিউল লোড হচ্ছে...</span>
+  </div>
+);
 
 function MainContent() {
   const [currentTab, setCurrentTab] = useState<string>('links');
@@ -82,37 +90,39 @@ function MainContent() {
           <AllDoneSection onGoToSupportSession={() => setCurrentTab('support')} />
         )}
 
-        {currentTab === 'leaderboard' && <LeaderboardView />}
+        <Suspense fallback={<ViewFallback />}>
+          {currentTab === 'leaderboard' && <LeaderboardView />}
 
-        {currentTab === 'notices' && <NoticeSection />}
+          {currentTab === 'notices' && <NoticeSection />}
 
-        {currentTab === 'reports' && (
-          canAccessAdmin ? (
-            <ReportsAdminView />
-          ) : (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto space-y-3">
-              <Shield className="w-12 h-12 text-amber-400 mx-auto" />
-              <h2 className="text-lg font-bold text-white">অ্যাক্সেস সংরক্ষিত</h2>
-              <p className="text-xs text-slate-400">রিপোর্ট ম্যানেজমেন্ট দেখতে অ্যাডমিন অথবা ডেভেলপার হিসেবে লগইন প্রয়োজন।</p>
-            </div>
-          )
-        )}
+          {currentTab === 'reports' && (
+            canAccessAdmin ? (
+              <ReportsAdminView />
+            ) : (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto space-y-3">
+                <Shield className="w-12 h-12 text-amber-400 mx-auto" />
+                <h2 className="text-lg font-bold text-white">অ্যাক্সেস সংরক্ষিত</h2>
+                <p className="text-xs text-slate-400">রিপোর্ট ম্যানেজমেন্ট দেখতে অ্যাডমিন অথবা ডেভেলপার হিসেবে লগইন প্রয়োজন।</p>
+              </div>
+            )
+          )}
 
-        {currentTab === 'profile' && (
-          <MemberProfileView onNavigateTab={(tab) => setCurrentTab(tab)} />
-        )}
+          {currentTab === 'profile' && (
+            <MemberProfileView onNavigateTab={(tab) => setCurrentTab(tab)} />
+          )}
 
-        {currentTab === 'admin' && (
-          canAccessAdmin ? (
-            <AdminDashboard />
-          ) : (
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto space-y-3">
-              <Shield className="w-12 h-12 text-red-400 mx-auto" />
-              <h2 className="text-lg font-bold text-white">অ্যাডমিন অ্যাক্সেস সীমাবদ্ধ</h2>
-              <p className="text-xs text-slate-400">এই প্যানেল শুধুমাত্র অ্যাডমিন ও সিস্টেম ডেভেলপারদের জন্য সংরক্ষিত।</p>
-            </div>
-          )
-        )}
+          {currentTab === 'admin' && (
+            canAccessAdmin ? (
+              <AdminDashboard />
+            ) : (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-lg mx-auto space-y-3">
+                <Shield className="w-12 h-12 text-red-400 mx-auto" />
+                <h2 className="text-lg font-bold text-white">অ্যাডমিন অ্যাক্সেস সীমাবদ্ধ</h2>
+                <p className="text-xs text-slate-400">এই প্যানেল শুধুমাত্র অ্যাডমিন ও সিস্টেম ডেভেলপারদের জন্য সংরক্ষিত।</p>
+              </div>
+            )
+          )}
+        </Suspense>
       </main>
 
       {/* Footer */}
@@ -130,19 +140,22 @@ function MainContent() {
         </div>
       </footer>
 
-      {/* Modals */}
-      <LinkSubmissionModal
-        isOpen={submitModalOpen}
-        onClose={() => setSubmitModalOpen(false)}
-      />
+      {/* Modals with Suspense */}
+      <Suspense fallback={null}>
+        {submitModalOpen && (
+          <LinkSubmissionModal
+            isOpen={submitModalOpen}
+            onClose={() => setSubmitModalOpen(false)}
+          />
+        )}
 
-      {/* Festival Welcome Greeting Modal */}
-      <FestivalWelcomeModal
-        theme={currentThemeConfig}
-        customGreeting={activeFestivalTheme.customGreeting}
-        customSubtitle={activeFestivalTheme.customSubtitle}
-        expiresAt={activeFestivalTheme.expiresAt}
-      />
+        <FestivalWelcomeModal
+          theme={currentThemeConfig}
+          customGreeting={activeFestivalTheme.customGreeting}
+          customSubtitle={activeFestivalTheme.customSubtitle}
+          expiresAt={activeFestivalTheme.expiresAt}
+        />
+      </Suspense>
 
       {/* Mobile Bottom Navigation Bar */}
       <BottomNavBar

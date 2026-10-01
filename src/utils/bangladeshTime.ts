@@ -7,11 +7,14 @@
 export const BDT_TIMEZONE = 'Asia/Dhaka';
 
 /**
- * Returns current Date object represented in Bangladesh Time (Asia/Dhaka)
+ * Returns current Date object represented in Bangladesh Time (Asia/Dhaka, UTC+6)
+ * Uses exact UTC offset arithmetic to avoid locale-string parsing quirks across browsers.
  */
 export function getBangladeshNow(): Date {
-  const str = new Date().toLocaleString('en-US', { timeZone: BDT_TIMEZONE });
-  return new Date(str);
+  const now = new Date();
+  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const bdtMs = utcMs + (6 * 3600000);
+  return new Date(bdtMs);
 }
 
 /**
@@ -108,22 +111,35 @@ export function isWithinAllDoneWindow(
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const [startH, startM] = startTime.split(':').map(Number);
-  const startMinutes = startH * 60 + startM;
+  const startMinutes = (startH || 0) * 60 + (startM || 0);
 
-  // Before 5:00 PM BDT
+  let [deadH, deadM] = deadlineTime.split(':').map(Number);
+  if (deadH === 24 || deadH === 0) deadH = 24;
+  const deadlineMinutes = (deadH || 24) * 60 + (deadM || 0);
+
+  // Before startTime (e.g. before 5:00 PM BDT)
   if (currentMinutes < startMinutes) {
     return {
       isOpen: false,
       isLate: false,
-      message: `All Done শুরু হবে বিকাল ৫:০০ টায় (BDT)`,
+      message: `All Done শুরু হবে বিকাল ${startTime} টায় (BDT)`,
     };
   }
 
-  // Between 5:00 PM and midnight 12:00 AM
+  // After deadlineTime
+  if (currentMinutes >= deadlineMinutes) {
+    return {
+      isOpen: false,
+      isLate: true,
+      message: `All Done সময়সীমা শেষ হয়েছে (${deadlineTime} BDT)`,
+    };
+  }
+
+  // Between startTime and deadline
   return {
     isOpen: true,
     isLate: false,
-    message: `All Done এখন চালু আছে (রাত ১২:০০ টা পর্যন্ত BDT)`,
+    message: `All Done এখন চালু আছে (${deadlineTime} পর্যন্ত BDT)`,
   };
 }
 

@@ -28,7 +28,7 @@ export const AdminInviteMember: React.FC = () => {
       return;
     }
 
-    if (fbValidation && !fbValidation.isValid) {
+    if (fbValidation && !fbValidation.valid) {
       setErrorMsg('Facebook Profile Link সঠিক নয়।');
       return;
     }
@@ -40,8 +40,8 @@ export const AdminInviteMember: React.FC = () => {
           email: email.trim(),
           facebookUrl: facebookUrl.trim(),
           facebookName: facebookName.trim(),
-          facebookIdentityKey: fbValidation?.normalizedId || facebookUrl.trim(),
-          facebookIdentityType: fbValidation?.type || 'UNKNOWN',
+          facebookIdentityKey: fbValidation?.identityKey || facebookUrl.trim(),
+          facebookIdentityType: fbValidation?.identityType || 'UNKNOWN',
           profilePhotoUrl: profilePhotoUrl.trim()
         }
       });
@@ -177,8 +177,8 @@ export const AdminInviteMember: React.FC = () => {
                 />
               </div>
               {fbValidation && (
-                <div className={`text-[10px] mt-1 ${fbValidation.isValid ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {fbValidation.isValid ? '✓ Valid Profile' : '✗ Invalid Facebook Link'}
+                <div className={`text-[10px] mt-1 ${fbValidation.valid ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {fbValidation.valid ? '✓ Valid Profile' : '✗ Invalid Facebook Link'}
                 </div>
               )}
             </div>

@@ -407,13 +407,8 @@ export const membersApi = {
       const user = authData.user;
       const userEmail = (user.email || '').toLowerCase().trim();
 
-      // Check if developer email to trigger secure claim
-      if (userEmail === 'muradshihab516@gmail.com' || userEmail === 'supportlinkbox@gmail.com') {
-        try { await supabase.rpc('claim_seeded_developer'); } catch {}
-      } else {
-        // Try to bind orphan profile for regular members securely
-        try { await supabase.rpc('ensure_my_member_profile'); } catch {}
-      }
+      // Ensure member profile is cleanly bound to authenticated session
+      try { await supabase.rpc('ensure_my_member_profile'); } catch {}
 
       // Fetch the profile strictly by auth_user_id mapped to authenticated user session
       const { data: profile } = await supabase
@@ -1040,6 +1035,25 @@ export const configApi = {
         .from('settings')
         .select('*')
         .eq('id', 'default')
+        .single();
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data: data as SystemConfig };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async updateSettings(updates: Partial<SystemConfig>): Promise<ApiResponse<SystemConfig>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: updates as SystemConfig };
+      const { data, error } = await supabase
+        .from('settings')
+        .upsert({
+          id: 'default',
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .select()
         .single();
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data: data as SystemConfig };

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { RotateCcw, AlertTriangle, ShieldCheck, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { getBangladeshDateString } from '../../utils/bangladeshTime';
 
 interface SystemResetModalProps {
   onClose: () => void;
@@ -18,6 +20,10 @@ export const SystemResetModal: React.FC<SystemResetModalProps> = ({ onClose }) =
 
   const handleExecuteReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isDev) {
+      setErrorMsg('সিকিউরিটি অ্যালার্ট: কেবল DEVELOPER রোলধারী ব্যক্তি সিস্টেম রিসেট করতে পারবেন।');
+      return;
+    }
     if (confirmText !== 'RESET-SYSTEM') {
       setErrorMsg('সঠিক নিশ্চিতকরণ কোড "RESET-SYSTEM" লিখুন।');
       return;
@@ -27,12 +33,31 @@ export const SystemResetModal: React.FC<SystemResetModalProps> = ({ onClose }) =
     setErrorMsg('');
 
     try {
-      // Simulate system reset delay
-      await new Promise((res) => setTimeout(res, 1200));
+      if (isSupabaseConfigured) {
+        const todayDate = getBangladeshDateString();
+        if (resetType === 'DAILY') {
+          await supabase.from('daily_links').delete().eq('date', todayDate);
+          await supabase.from('all_done').delete().eq('date', todayDate);
+        } else if (resetType === 'ALL') {
+          await supabase.from('daily_links').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          await supabase.from('all_done').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        }
+      } else {
+        if (resetType === 'DAILY') {
+          localStorage.removeItem('slb_daily_links');
+          localStorage.removeItem('slb_all_done_records');
+        } else if (resetType === 'ALL') {
+          localStorage.removeItem('slb_daily_links');
+          localStorage.removeItem('slb_all_done_records');
+          localStorage.removeItem('slb_reports');
+          localStorage.removeItem('slb_punishments');
+        }
+      }
+
       await refreshData();
       setSuccess(true);
-    } catch (err) {
-      setErrorMsg('সিস্টেম রিসেট ব্যর্থ হয়েছে।');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'সিস্টেম রিসেট ব্যর্থ হয়েছে।');
     } finally {
       setLoading(false);
     }

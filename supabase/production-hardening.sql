@@ -1064,6 +1064,17 @@ BEGIN
         END IF;
     END IF;
 
+    -- SECTION S-C6 HARDENING: Direct Point / VIP / Streak write prevention
+    IF NEW.points IS DISTINCT FROM OLD.points OR 
+       NEW.vip_points IS DISTINCT FROM OLD.vip_points OR 
+       NEW.is_vip IS DISTINCT FROM OLD.is_vip OR 
+       NEW.vip_expires_at IS DISTINCT FROM OLD.vip_expires_at OR 
+       NEW.streak IS DISTINCT FROM OLD.streak THEN
+        IF current_setting('slb.internal_points_change', true) IS DISTINCT FROM 'true' THEN
+            RAISE EXCEPTION 'SECURITY_VIOLATION: Direct points, streak, or VIP modification is prohibited. Use authorized RPC.';
+        END IF;
+    END IF;
+
     RETURN NEW;
 END;
 $$;
