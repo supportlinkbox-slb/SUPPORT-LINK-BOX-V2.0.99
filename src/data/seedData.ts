@@ -4,6 +4,8 @@ import { getBangladeshDateString } from '../utils/bangladeshTime';
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   submission_start_time: '10:00',
   submission_end_time: '16:50',
+  admin_submission_start_time: '16:51',
+  admin_submission_end_time: '16:59',
   all_done_start_time: '17:00',
   all_done_deadline_time: '24:00',
   recovery_end_time: '10:00',
@@ -12,6 +14,18 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   base_all_done_points: 5,
   community_name: 'Support Link Box Official',
   timezone: 'Asia/Dhaka',
+  // Configurable point system defaults
+  points_daily_link_submit: 5,
+  points_per_support: 1,
+  points_all_done: 5,
+  points_fastest_top1: 10,
+  points_fastest_top2: 8,
+  points_fastest_top3: 6,
+  points_fastest_top4: 4,
+  points_fastest_top5: 2,
+  penalty_late_support: 2,
+  penalty_fake_all_done: 10,
+  penalty_inactive: 1,
 };
 
 const today = getBangladeshDateString();

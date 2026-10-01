@@ -1317,6 +1317,7 @@ export const scheduledLinksApi = {
 
   async createScheduledLinkSecure(params: {
     target_date: string;
+    target_time?: string;
     post_type: PostType;
     caption: string;
     instruction: string;
@@ -1328,6 +1329,7 @@ export const scheduledLinksApi = {
       if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
       const { data, error } = await supabase.rpc('create_scheduled_link_secure', {
         p_target_date: params.target_date,
+        p_target_time: params.target_time || '12:00',
         p_post_type: params.post_type,
         p_caption: params.caption,
         p_instruction: params.instruction,
@@ -1338,8 +1340,18 @@ export const scheduledLinksApi = {
 
       if (error) {
         let msg = formatSupabaseError(error);
-        if (msg.includes('SCHEDULE_WINDOW_NOT_OPEN')) {
-          msg = 'পরবর্তী দিনের জন্য লিংক শিডিউল শুরু হবে দুপুর ১২:০০ টায় (BDT)।';
+        if (msg.includes('PENDING_SUPPORT_EXIST')) {
+          msg = 'আজকের সকল প্রয়োজনীয় সাপোর্ট সম্পন্ন করার পর শিডিউল করতে পারবেন।';
+        } else if (msg.includes('ALL_DONE_REQUIRED')) {
+          msg = 'শিডিউল লিংক তৈরি করতে আজকের All Done সম্পন্ন করা আবশ্যক।';
+        } else if (msg.includes('FAKE_ALL_DONE_RESTRICTION')) {
+          msg = 'এই সপ্তাহে আপনার অ্যাকাউন্টে ফেক অল ডান থাকায় শিডিউল ফিচার সাময়িকভাবে ব্লক রয়েছে।';
+        } else if (msg.includes('SCHEDULE_PERMISSION_REVOKED')) {
+          msg = 'এডমিন কর্তৃক আপনার শিডিউল সুবিধা বন্ধ রয়েছে।';
+        } else if (msg.includes('INVALID_EXECUTION_TIME')) {
+          msg = 'শিডিউল লিংক শুধুমাত্র দুপুর ১২:০০ PM হতে বিকাল ০৪:০০ PM-এর মধ্যে নির্ধারণ করা যাবে।';
+        } else if (msg.includes('SCHEDULE_WINDOW_NOT_OPEN')) {
+          msg = 'পরবর্তী দিনের জন্য লিংক শিডিউল উন্মুক্ত রয়েছে।';
         } else if (msg.includes('DUPLICATE_SCHEDULE')) {
           msg = 'এই দিনের জন্য ইতোমধ্যে একটি লিংক Scheduled আছে।';
         } else if (msg.includes('INVALID_URL')) {
@@ -1478,13 +1490,64 @@ export const allDoneAdminApi = {
     }
   },
 
-  async confirmFakeAllDone(incidentId: string, reason: string): Promise<ApiResponse<any>> {
+  async confirmFakeAllDone(targetId: string, reason: string): Promise<ApiResponse<any>> {
     try {
       if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
-      const { data, error } = await supabase.rpc('confirm_fake_all_done_secure', {
-        p_incident_id: incidentId,
+      
+      // Try direct confirm with targetId as incident_id
+      let { data, error } = await supabase.rpc('confirm_fake_all_done_secure', {
+        p_incident_id: targetId,
         p_reason: reason,
       });
+
+      if (error && (error.message.includes('INCIDENT_NOT_FOUND') || error.message.includes('not found'))) {
+        // Target ID was all_done_id. Check if an incident already exists for this all_done_id
+        const { data: existingInc } = await supabase
+          .from('fake_all_done_incidents')
+          .select('id')
+          .eq('all_done_id', targetId)
+          .maybeSingle();
+
+        if (existingInc?.id) {
+          const res = await supabase.rpc('confirm_fake_all_done_secure', {
+            p_incident_id: existingInc.id,
+            p_reason: reason,
+          });
+          data = res.data;
+          error = res.error;
+        } else {
+          // Fetch all_done record to populate incident
+          const { data: allDoneRow } = await supabase
+            .from('all_done')
+            .select('id, member_id, community_id')
+            .eq('id', targetId)
+            .maybeSingle();
+
+          if (allDoneRow) {
+            const { data: newInc, error: incErr } = await supabase
+              .from('fake_all_done_incidents')
+              .insert({
+                all_done_id: allDoneRow.id,
+                member_id: allDoneRow.member_id,
+                community_id: allDoneRow.community_id || 'main',
+                review_status: 'PENDING_REVIEW',
+                reason: reason,
+              })
+              .select('id')
+              .single();
+
+            if (!incErr && newInc?.id) {
+              const res = await supabase.rpc('confirm_fake_all_done_secure', {
+                p_incident_id: newInc.id,
+                p_reason: reason,
+              });
+              data = res.data;
+              error = res.error;
+            }
+          }
+        }
+      }
+
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data };
     } catch (err: any) {

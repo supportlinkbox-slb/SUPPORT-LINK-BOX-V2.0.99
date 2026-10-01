@@ -34,13 +34,11 @@ export const SystemResetModal: React.FC<SystemResetModalProps> = ({ onClose }) =
 
     try {
       if (isSupabaseConfigured) {
-        const todayDate = getBangladeshDateString();
-        if (resetType === 'DAILY') {
-          await supabase.from('daily_links').delete().eq('date', todayDate);
-          await supabase.from('all_done').delete().eq('date', todayDate);
-        } else if (resetType === 'ALL') {
-          await supabase.from('daily_links').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-          await supabase.from('all_done').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        const { error: rpcErr } = await supabase.rpc('rpc_developer_reset_system', {
+          p_reset_type: resetType,
+        });
+        if (rpcErr) {
+          throw new Error(rpcErr.message || 'রিসেট সম্পন্ন করা যায়নি।');
         }
       } else {
         if (resetType === 'DAILY') {

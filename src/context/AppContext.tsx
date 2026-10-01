@@ -40,6 +40,7 @@ import {
   getBangladeshNow,
   getBangladeshTomorrowDateString,
   canScheduleForTomorrow,
+  isValidScheduledExecutionTime,
 } from '../utils/bangladeshTime';
 import {
   isSupabaseConfigured,
@@ -114,6 +115,7 @@ interface AppContextType {
   scheduledLinks: ScheduledLink[];
   createScheduledLink: (params: {
     target_date: string;
+    target_time?: string;
     post_type: PostType;
     caption: string;
     instruction: string;
@@ -135,6 +137,7 @@ interface AppContextType {
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>;
   executeDueScheduledLinks: () => Promise<{ success: boolean; executedCount?: number; error?: string }>;
+  updateMemberSchedulePermission: (targetId: string, canSchedule: boolean) => Promise<{ success: boolean; error?: string }>;
 
   // Support Session & Facebook Workflow
   supportedLinkIds: Set<string>;
@@ -531,8 +534,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const profRes = await membersApi.getCurrentProfile();
       if (profRes.success && profRes.data) {
+        setCurrentUser(profRes.data);
         if (profRes.data.status === 'ACTIVE') {
-          setCurrentUser(profRes.data);
           const suppRes = await supportApi.getTodaySupportRecords(todayDate, profRes.data.id);
           if (suppRes.success && suppRes.data) {
             setSupportedLinkIds(new Set(suppRes.data.map((r) => r.link_id)));
@@ -541,9 +544,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (notifRes.success && notifRes.data) {
             setNotifications(notifRes.data);
           }
-        } else {
-          await authApi.signOut();
-          setCurrentUser(null);
         }
 
         // Section 46: Only load full member directory if user has admin/developer privileges
@@ -583,16 +583,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           // 2. Authoritative profile status verification
           const profRes = await membersApi.getCurrentProfile();
           if (profRes.success && profRes.data && isMounted) {
+            setCurrentUser(profRes.data);
             if (profRes.data.status === 'ACTIVE') {
-              setCurrentUser(profRes.data);
               const suppRes = await supportApi.getTodaySupportRecords(todayDate, profRes.data.id);
               if (suppRes.success && suppRes.data && isMounted) {
                 setSupportedLinkIds(new Set(suppRes.data.map((r) => r.link_id)));
               }
-            } else {
-              // NON-ACTIVE USERS MUST NOT KEEP SESSIONS: Sign out immediately
-              await authApi.signOut();
-              setCurrentUser(null);
             }
           } else if (isMounted) {
             await authApi.signOut();
@@ -1092,21 +1088,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAuditLogs([]);
   };
 
-  const updateSystemSettings = async (
-    updates: Partial<SystemConfig>
-  ): Promise<{ success: boolean; error?: string }> => {
-    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
-      return { success: false, error: 'অনুমতি নেই। কেবল এডমিন সেটিংস পরিবর্তন করতে পারেন।' };
-    }
-    const res = await configApi.updateSettings(updates);
-    if (res.success && res.data) {
-      setSystemConfig(res.data);
-      addAuditLog('SETTINGS_UPDATED', 'SYSTEM', 'default', `Updated system configuration parameters`);
-      return { success: true };
-    }
-    return { success: false, error: res.error || 'সেটিংস আপডেট করতে ব্যর্থ হয়েছে।' };
-  };
-
   const resetPassword = async (email: string) => {
     return await authApi.resetPasswordForEmail(email);
   };
@@ -1155,31 +1136,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!target) {
         return { success: false, error: 'নির্দিষ্ট সদস্যকে খুঁজে পাওয়া যায়নি।' };
       }
-      if (target.status === 'SUSPENDED' || target.status === 'REMOVED') {
+      if (target.status === 'SUSPENDED' || target.status === 'REMOVED' || target.status === 'FROZEN') {
         return { success: false, error: `উক্ত সদস্যের অ্যাকাউন্ট বর্তমানে ${target.status} থাকায় লিংক জমা দেওয়া যাবে না।` };
       }
       owner = target;
       submittedByAdminId = currentUser.id;
+      // Rule 4: Admin submitting for a normal member MUST be treated as that member's normal link
+      requestedCategory = 'NORMAL';
     }
 
     // Submission Window check:
-    // Normal member submitting NORMAL category must be within 10:00 to 16:50 BDT window
+    // Rule 1: Normal member link submission window is 10:00 AM to 04:50 PM BDT
+    // Rule 2 & 3: Admin last 10 minutes (04:51 PM to 04:59 PM BDT) is reserved for Admin special links (Admin/VIP/Notice)
+    const isNormalMemberLink = requestedCategory === 'NORMAL';
     const isSpecialCategory = requestedCategory === 'VIP' || requestedCategory === 'ADMIN' || requestedCategory === 'NOTICE';
-    const isExemptFromWindow = isAdminOrDev || isSpecialCategory;
 
-    if (!isExemptFromWindow) {
-      const now = getBangladeshNow();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const [startH, startM] = (systemConfig.submission_start_time || '10:00').split(':').map(Number);
-      const [endH, endM] = (systemConfig.submission_end_time || '16:50').split(':').map(Number);
-      const startMinutes = startH * 60 + startM;
-      const endMinutes = endH * 60 + endM;
+    const now = getBangladeshNow();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const [startH, startM] = (systemConfig.submission_start_time || '10:00').split(':').map(Number);
+    const [endH, endM] = (systemConfig.submission_end_time || '16:50').split(':').map(Number);
+    const startMinutes = startH * 60 + startM; // 10:00 AM = 600 min
+    const endMinutes = endH * 60 + endM;     // 04:50 PM = 1010 min
 
+    const adminStartMinutes = 16 * 60 + 51; // 04:51 PM = 1011 min
+    const adminEndMinutes = 16 * 60 + 59;   // 04:59 PM = 1019 min
+
+    if (isNormalMemberLink) {
       if (currentMinutes < startMinutes) {
-        return { success: false, error: 'লিংক জমা দেওয়ার সময় এখনো শুরু হয়নি।' };
+        return { success: false, error: 'সদস্যদের লিংক জমা দেওয়ার সময় এখনো শুরু হয়নি (সকাল ১০:০০ AM BDT)।' };
       }
       if (currentMinutes > endMinutes) {
-        return { success: false, error: 'আজকের লিংক জমা দেওয়ার সময় শেষ হয়েছে।' };
+        return { success: false, error: 'আজকের সাধারণ সদস্য লিংক জমা দেওয়ার সময় শেষ হয়েছে (বিকাল ০৪:৫০ PM BDT)।' };
+      }
+    } else if (isSpecialCategory) {
+      const isDuringAdminWindow = currentMinutes >= adminStartMinutes && currentMinutes <= adminEndMinutes;
+      const isDuringNormalHours = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+      if (!isDuringAdminWindow && !isDuringNormalHours && !isAdminOrDev) {
+        return { success: false, error: 'এডমিন স্পেশাল লিংক সাবমিশন সময় সকাল ১০:০০ - বিকাল ০৪:৫৯ PM BDT।' };
       }
     }
 
@@ -1383,6 +1376,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Scheduled Links Implementations (Chapter 07)
   const createScheduledLink = async (params: {
     target_date: string;
+    target_time?: string;
     post_type: PostType;
     caption: string;
     instruction: string;
@@ -1393,19 +1387,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!currentUser) return { success: false, error: 'লগইন আবশ্যক।' };
 
     const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'DEVELOPER';
-    const tomorrowDate = getBangladeshTomorrowDateString();
+    const targetTime = params.target_time || '12:00';
 
-    // Client-side guard for 1-day early rule (Admins exempt)
-    if (params.target_date === tomorrowDate && !isAdmin) {
-      const scheduleRule = canScheduleForTomorrow();
-      if (!scheduleRule.isAllowed) {
-        return { success: false, error: scheduleRule.message };
+    // 1. Time Restriction: Target execution time MUST be between 12:00 PM and 04:00 PM BDT
+    const timeValidation = isValidScheduledExecutionTime(targetTime);
+    if (!timeValidation.isValid) {
+      return { success: false, error: timeValidation.message };
+    }
+
+    // 2. Member Eligibility Validations (Exempt if Admin scheduling on behalf)
+    if (!isAdmin) {
+      // Rule 4: Admin permission check
+      if (currentUser.can_schedule_links === false) {
+        return { success: false, error: 'এডমিন কর্তৃক আপনার শিডিউল সুবিধা বন্ধ রয়েছে।' };
+      }
+
+      // Rule 1: Pending support check (must have 0 pending supports)
+      if (pendingRequiredSupportCount > 0) {
+        return {
+          success: false,
+          error: `শিডিউল সুবিধা ব্যবহার করতে আজকের সকল সাপোর্ট সম্পন্ন থাকতে হবে (এখনও ${pendingRequiredSupportCount} টি বাকি)।`,
+        };
+      }
+
+      // Rule 2: All Done requirement (must have submitted All Done today)
+      if (!isAllDoneSubmittedToday) {
+        return {
+          success: false,
+          error: 'শিডিউল লিংক তৈরি করতে আজকের All Done সফলভাবে সম্পন্ন করা আবশ্যক।',
+        };
+      }
+
+      // Rule 3: Confirmed Fake All Done this week
+      const hasWeeklyFakeAllDone = punishments.some(
+        (p) => p.member_id === currentUser.id && p.punishment_type === 'FAKE_ALL_DONE' && p.status !== 'REJECTED'
+      );
+      if (hasWeeklyFakeAllDone) {
+        return {
+          success: false,
+          error: 'এই সপ্তাহে আপনার অ্যাকাউন্টে ফেক অল ডান রিপোর্ট থাকায় শিডিউল ফিচার সাময়িকভাবে ব্লক রয়েছে।',
+        };
       }
     }
 
     if (isSupabaseConfigured) {
       const res = await scheduledLinksApi.createScheduledLinkSecure({
         target_date: params.target_date,
+        target_time: targetTime,
         post_type: params.post_type,
         caption: params.caption,
         instruction: params.instruction,
@@ -1437,7 +1465,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       owner_name: targetOwner.name,
       owner_member_number: targetOwner.member_number,
       target_date: params.target_date,
-      target_time: '10:00',
+      target_time: targetTime,
       post_type: params.post_type,
       category: params.category || 'NORMAL',
       caption: params.caption.trim() || 'No caption provided',
@@ -1454,7 +1482,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       'SCHEDULE_CREATED',
       'SCHEDULED_LINK',
       newSchedule.id,
-      `Scheduled link for ${params.target_date} (Owner: ${targetOwner.name})`
+      `Scheduled link for ${params.target_date} at ${targetTime} BDT (Owner: ${targetOwner.name})`
     );
     return { success: true, schedule: newSchedule };
   };
@@ -2589,6 +2617,70 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
+  const updateMemberSchedulePermission = async (targetId: string, canSchedule: boolean) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'এডমিন অনুমতি প্রয়োজন।' };
+    }
+
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('members')
+        .update({ can_schedule_links: canSchedule, updated_at: new Date().toISOString() })
+        .eq('id', targetId);
+      if (error) return { success: false, error: error.message };
+      await refreshData();
+      return { success: true };
+    }
+
+    setMembers((prev) =>
+      prev.map((m) => (m.id === targetId ? { ...m, can_schedule_links: canSchedule } : m))
+    );
+    addAuditLog(
+      'UPDATE_SCHEDULE_PERMISSION',
+      'MEMBER',
+      targetId,
+      `${canSchedule ? 'Enabled' : 'Disabled'} scheduling permission for member`
+    );
+    return { success: true };
+  };
+
+  const updateSystemSettings = async (updates: Partial<SystemConfig>) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'এডমিন অনুমতি প্রয়োজন।' };
+    }
+
+    const mergedConfig: SystemConfig = {
+      ...systemConfig,
+      ...updates,
+      points_daily_link_submit: updates.points_daily_link_submit ?? systemConfig.points_daily_link_submit ?? 5,
+      points_per_support: updates.points_per_support ?? systemConfig.points_per_support ?? 1,
+      points_all_done: updates.points_all_done ?? systemConfig.points_all_done ?? 5,
+      points_fastest_top1: updates.points_fastest_top1 ?? systemConfig.points_fastest_top1 ?? 10,
+      points_fastest_top2: updates.points_fastest_top2 ?? systemConfig.points_fastest_top2 ?? 8,
+      points_fastest_top3: updates.points_fastest_top3 ?? systemConfig.points_fastest_top3 ?? 6,
+      points_fastest_top4: updates.points_fastest_top4 ?? systemConfig.points_fastest_top4 ?? 4,
+      points_fastest_top5: updates.points_fastest_top5 ?? systemConfig.points_fastest_top5 ?? 2,
+      penalty_late_support: updates.penalty_late_support ?? systemConfig.penalty_late_support ?? 2,
+      penalty_fake_all_done: updates.penalty_fake_all_done ?? systemConfig.penalty_fake_all_done ?? 10,
+      penalty_inactive: updates.penalty_inactive ?? systemConfig.penalty_inactive ?? 1,
+    };
+
+    setSystemConfig(mergedConfig);
+
+    if (isSupabaseConfigured) {
+      const res = await configApi.updateSettings(mergedConfig as any);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+    } else {
+      localStorage.setItem('slb_system_config', JSON.stringify(mergedConfig));
+    }
+
+    addAuditLog('SYSTEM_SETTINGS_UPDATED', 'SETTINGS', 'SYSTEM', `Admin ${currentUser.name} updated point & system configuration`);
+    await refreshData();
+    return { success: true };
+  };
+
   const contextValue = useMemo<AppContextType>(() => ({
     isConfigured: isSupabaseConfigured,
     systemConfig,
@@ -2651,6 +2743,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     rejectMember,
     adminRestoreMember,
     updateMemberProfile,
+    updateMemberSchedulePermission,
     getDailyLeaderboard,
     getMemberPointHistory,
     pendingReviews,

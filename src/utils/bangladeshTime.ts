@@ -18,15 +18,19 @@ export function getBangladeshNow(): Date {
 }
 
 /**
- * Returns today's date in YYYY-MM-DD format based on Bangladesh Time
+ * Returns today's date in YYYY-MM-DD format based on Bangladesh Time (Asia/Dhaka)
  */
-export function getBangladeshDateString(date = getBangladeshNow()): string {
+export function getBangladeshDateString(inputDate?: Date | string): string {
+  const date = inputDate ? (typeof inputDate === 'string' ? new Date(inputDate) : inputDate) : new Date();
   try {
     return new Intl.DateTimeFormat('en-CA', { timeZone: BDT_TIMEZONE }).format(date);
   } catch {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
+    const now = new Date();
+    const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const bdt = new Date(utcMs + (6 * 3600000));
+    const y = bdt.getFullYear();
+    const m = String(bdt.getMonth() + 1).padStart(2, '0');
+    const d = String(bdt.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
 }
@@ -63,25 +67,47 @@ export function formatToBDT(dateInput: Date | string | number, includeDate = fal
 }
 
 /**
+ * Standard message when member finishes support obligations before 5:00 PM BDT
+ */
+export const ALL_DONE_EARLY_COMPLETION_MESSAGE =
+  'আপনার প্রয়োজনীয় Support সম্পন্ন হয়েছে। তবে All Done এখনও শুরু হয়নি। বিকেল ৫টা পর্যন্ত অপেক্ষা করুন। এই সময়ের মধ্যে আরও Member Link Submit করতে পারে।';
+
+/**
  * Checks whether current BDT time is within normal member link submission window:
- * Default: 10:00 AM to 04:50 PM BDT
+ * Rule 1: Normal Member Link Submission Time: 10:00 AM -> 04:50 PM BDT
+ * Rule 2: Admin Last 10 Minutes Window: 04:51 PM -> 04:59 PM BDT (Admin/VIP/Notice links)
  */
 export function isWithinSubmissionWindow(
   startTime = '10:00',
   endTime = '16:50'
-): { isOpen: boolean; message: string } {
+): { isOpen: boolean; isAdminWindow: boolean; windowType: 'CLOSED' | 'MEMBER' | 'ADMIN_SPECIAL'; message: string } {
   const now = getBangladeshNow();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const [startH, startM] = startTime.split(':').map(Number);
   const [endH, endM] = endTime.split(':').map(Number);
 
-  const startMinutes = startH * 60 + startM;
-  const endMinutes = endH * 60 + endM;
+  const startMinutes = startH * 60 + startM; // 10:00 AM = 600 min
+  const endMinutes = endH * 60 + endM; // 04:50 PM = 1010 min
+
+  const adminStartMinutes = 16 * 60 + 51; // 04:51 PM = 1011 min
+  const adminEndMinutes = 16 * 60 + 59;   // 04:59 PM = 1019 min
+
+  // Admin last 10 minutes reserved window (04:51 PM to 04:59 PM BDT)
+  if (currentMinutes >= adminStartMinutes && currentMinutes <= adminEndMinutes) {
+    return {
+      isOpen: false, // Closed for normal members
+      isAdminWindow: true,
+      windowType: 'ADMIN_SPECIAL',
+      message: 'এডমিন স্পেশাল লিংক সাবমিশন উইন্ডো (০৪:৫১ - ০৪:৫৯ PM BDT)',
+    };
+  }
 
   if (currentMinutes < startMinutes) {
     return {
       isOpen: false,
+      isAdminWindow: false,
+      windowType: 'CLOSED',
       message: `লিংক সাবমিশন শুরু হবে সকাল ১০:০০ টায় (BDT)`,
     };
   }
@@ -89,14 +115,27 @@ export function isWithinSubmissionWindow(
   if (currentMinutes > endMinutes) {
     return {
       isOpen: false,
-      message: `আজকের লিংক সাবমিশন বিকাল ৪:৫০ এ শেষ হয়েছে (BDT)`,
+      isAdminWindow: false,
+      windowType: 'CLOSED',
+      message: `আজকের সাধারণ লিংক সাবমিশন বিকাল ৪:৫০ এ শেষ হয়েছে (BDT)`,
     };
   }
 
   return {
     isOpen: true,
+    isAdminWindow: false,
+    windowType: 'MEMBER',
     message: `লিংক সাবমিশন চালু রয়েছে (বিকাল ৪:৫০ পর্যন্ত BDT)`,
   };
+}
+
+/**
+ * Checks whether current BDT time is within Admin special submission window (04:51 PM to 04:59 PM BDT)
+ */
+export function isWithinAdminSubmissionWindow(): boolean {
+  const now = getBangladeshNow();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  return currentMinutes >= (16 * 60 + 51) && currentMinutes <= (16 * 60 + 59);
 }
 
 /**
@@ -175,33 +214,60 @@ export function getRemainingEditSeconds(submittedAtIso: string): number {
  * Returns tomorrow's date in YYYY-MM-DD format based on Bangladesh Time
  */
 export function getBangladeshTomorrowDateString(): string {
-  const tomorrow = getBangladeshNow();
+  const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   return getBangladeshDateString(tomorrow);
 }
 
 /**
- * Checks if the member is eligible to schedule tomorrow's link.
- * Business Rule: Scheduling for tomorrow opens at 12:00 PM (noon) BDT on the previous day.
+ * Checks if the member is eligible to setup a schedule.
+ * Rule: Schedule setup is available at ANY TIME (morning, noon, evening, night).
  */
 export function canScheduleForTomorrow(): { isAllowed: boolean; message: string; targetDate: string } {
-  const now = getBangladeshNow();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const noonMinutes = 12 * 60; // 12:00 PM = 720 minutes
   const tomorrowDate = getBangladeshTomorrowDateString();
+  return {
+    isAllowed: true,
+    message: `ভবিষ্যৎ তারিখের (${tomorrowDate}) জন্য লিংক শিডিউল চালু রয়েছে।`,
+    targetDate: tomorrowDate,
+  };
+}
 
-  if (currentMinutes < noonMinutes) {
+/**
+ * Validates scheduled execution time.
+ * Rule: Scheduled Execution Time MUST be between 12:00 PM (12:00) and 04:00 PM (16:00) BDT.
+ * Target execution before 12:00 PM (e.g. 10:00 AM - 11:59 AM) or after 04:00 PM is REJECTED.
+ */
+export function isValidScheduledExecutionTime(timeStr?: string): { isValid: boolean; message: string } {
+  if (!timeStr) {
     return {
-      isAllowed: false,
-      message: `পরবর্তী দিনের (${tomorrowDate}) লিংক শিডিউল শুরু হবে আজ দুপুর ১২:০০ টায় (BDT)`,
-      targetDate: tomorrowDate,
+      isValid: false,
+      message: 'অনুগ্রহ করে শিডিউল পোস্টের সময় নির্বাচন করুন (১২:০০ PM হতে ০৪:০০ PM BDT)।',
+    };
+  }
+
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const totalMinutes = (hours || 0) * 60 + (minutes || 0);
+
+  const minAllowed = 12 * 60; // 12:00 PM = 720 minutes
+  const maxAllowed = 16 * 60; // 04:00 PM = 960 minutes
+
+  if (totalMinutes < minAllowed) {
+    return {
+      isValid: false,
+      message: 'শিডিউল লিংক শুধুমাত্র দুপুর ১২:০০ PM বা তার পরে এক্সিকিউশনের জন্য নির্ধারিত করা যাবে। (সকাল ১০:০০ - ১১:৫৯ AM সাধারণ সদস্যদের লাইভ সাবমিশন উইন্ডো)',
+    };
+  }
+
+  if (totalMinutes > maxAllowed) {
+    return {
+      isValid: false,
+      message: 'শিডিউল লিংক বিকাল ০৪:০০ PM-এর পরে নির্ধারণ করা যাবে না (০৪:০০ PM কাটঅফ)।',
     };
   }
 
   return {
-    isAllowed: true,
-    message: `পরবর্তী দিনের (${tomorrowDate}) জন্য লিংক শিডিউল চালু রয়েছে।`,
-    targetDate: tomorrowDate,
+    isValid: true,
+    message: 'বৈধ শিডিউল সময়সীমা।',
   };
 }
 

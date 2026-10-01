@@ -36,6 +36,7 @@ export interface MemberProfile {
   last_active_at: string;
   days_inactive?: number;
   can_submit_links?: boolean;
+  can_schedule_links?: boolean;
   is_verified?: boolean;
   approved_at?: string;
   approved_by?: string;
@@ -446,13 +447,27 @@ export interface VipRewardEntitlement {
 }
 
 export interface SystemSettings {
-  submission_start_time: string; // e.g. "00:00"
+  submission_start_time: string; // e.g. "10:00"
   submission_end_time: string; // e.g. "16:50"
+  admin_submission_start_time?: string; // "16:51"
+  admin_submission_end_time?: string; // "16:59"
   all_done_start_time: string; // e.g. "17:00"
-  all_done_deadline_time: string; // e.g. "23:59"
+  all_done_deadline_time: string; // e.g. "24:00"
   late_support_weekly_limit: number; // e.g. 2
   can_submit_links_global: boolean;
   maintenance_mode: boolean;
+  // Configurable Point System Settings
+  points_daily_link_submit?: number; // default: 5
+  points_per_support?: number; // default: 1
+  points_all_done?: number; // default: 5
+  points_fastest_top1?: number; // default: 10
+  points_fastest_top2?: number; // default: 8
+  points_fastest_top3?: number; // default: 6
+  points_fastest_top4?: number; // default: 4
+  points_fastest_top5?: number; // default: 2
+  penalty_late_support?: number; // default: 2
+  penalty_fake_all_done?: number; // default: 10
+  penalty_inactive?: number; // default: 1
 }
 
 export * from './festivalTheme';
@@ -460,6 +475,8 @@ export * from './festivalTheme';
 export interface SystemConfig {
   submission_start_time: string; // "10:00"
   submission_end_time: string; // "16:50"
+  admin_submission_start_time?: string; // "16:51"
+  admin_submission_end_time?: string; // "16:59"
   all_done_start_time: string; // "17:00"
   all_done_deadline_time: string; // "24:00"
   recovery_end_time: string; // "10:00"
@@ -468,6 +485,18 @@ export interface SystemConfig {
   base_all_done_points: number; // 5
   community_name: string;
   timezone: string; // "Asia/Dhaka" (BDT = UTC+6)
+  // Configurable Points
+  points_daily_link_submit: number;
+  points_per_support: number;
+  points_all_done: number;
+  points_fastest_top1: number;
+  points_fastest_top2: number;
+  points_fastest_top3: number;
+  points_fastest_top4: number;
+  points_fastest_top5: number;
+  penalty_late_support: number;
+  penalty_fake_all_done: number;
+  penalty_inactive: number;
 }
 
 export interface AdminSupportContact {

@@ -47,7 +47,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   onRequestReject,
   onRequestSubmitLink,
 }) => {
-  const { updateMemberProfile, auditLogs, dailyLinks, allDoneRecords, punishments } = useApp();
+  const { updateMemberProfile, updateMemberSchedulePermission, auditLogs, dailyLinks, allDoneRecords, punishments } = useApp();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'history' | 'edit'>('overview');
   

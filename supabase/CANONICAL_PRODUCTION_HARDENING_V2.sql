@@ -105,7 +105,7 @@ CREATE POLICY "Settings updateable by admin or developer"
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON public.audit_logs(actor_id);
 CREATE INDEX IF NOT EXISTS idx_reports_reported_member_id ON public.reports(reported_member_id);
 CREATE INDEX IF NOT EXISTS idx_daily_links_owner_date ON public.daily_links(owner_id, date);
-CREATE INDEX IF NOT EXISTS idx_support_records_member_date ON public.support_records(member_id, date);
+CREATE INDEX IF NOT EXISTS idx_support_records_supporter_date ON public.support_records(supporter_id, date);
 CREATE INDEX IF NOT EXISTS idx_notifications_member_unread ON public.notifications(member_id, is_read);
 
 -- 5. SECURE DEVELOPER RESET RPC (DEVELOPER ONLY)

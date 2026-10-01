@@ -12,12 +12,14 @@ import {
   Link as LinkIcon,
   Video,
   Image,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ScheduledLink, PostType } from '../../types';
 import {
   getBangladeshTomorrowDateString,
-  canScheduleForTomorrow,
+  isValidScheduledExecutionTime,
   formatToBDT,
 } from '../../utils/bangladeshTime';
 import { isValidFacebookUrl } from '../../utils/facebookLinks';
@@ -35,10 +37,12 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
     cancelScheduledLink,
     editScheduledLink,
     executeDueScheduledLinks,
+    pendingRequiredSupportCount,
+    isAllDoneSubmittedToday,
+    punishments,
   } = useApp();
 
   const tomorrowDate = getBangladeshTomorrowDateString();
-  const scheduleCheck = canScheduleForTomorrow();
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'DEVELOPER';
 
   const [postType, setPostType] = useState<PostType>('Photo');
@@ -46,6 +50,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
   const [instruction, setInstruction] = useState('');
   const [fbLink, setFbLink] = useState('');
   const [targetDate, setTargetDate] = useState(tomorrowDate);
+  const [targetTime, setTargetTime] = useState('12:00');
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,6 +58,21 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
   const [successMsg, setSuccessMsg] = useState('');
 
   if (!isOpen) return null;
+
+  // Eligibility Checklist calculations for Member
+  const hasPendingSupport = pendingRequiredSupportCount > 0;
+  const isAllDoneCompleted = isAllDoneSubmittedToday;
+  const hasWeeklyFakeAllDone = punishments.some(
+    (p) => p.member_id === currentUser?.id && p.punishment_type === 'FAKE_ALL_DONE' && (p.status === 'PENDING' || p.status === 'IN_PROGRESS')
+  );
+  const isSchedulePermissionEnabled = currentUser?.can_schedule_links !== false;
+
+  const isMemberEligible = isAdmin || (
+    !hasPendingSupport &&
+    isAllDoneCompleted &&
+    !hasWeeklyFakeAllDone &&
+    isSchedulePermissionEnabled
+  );
 
   // Filter schedules for user or all for admins
   const mySchedules = scheduledLinks.filter((s) =>
@@ -74,8 +94,15 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
       return;
     }
 
-    if (!isAdmin && targetDate === tomorrowDate && !scheduleCheck.isAllowed) {
-      setErrorMsg(scheduleCheck.message);
+    // Time validation: 12:00 PM to 04:00 PM BDT
+    const timeCheck = isValidScheduledExecutionTime(targetTime);
+    if (!timeCheck.isValid) {
+      setErrorMsg(timeCheck.message);
+      return;
+    }
+
+    if (!isAdmin && !isMemberEligible) {
+      setErrorMsg('শিডিউল তৈরি করার জন্য প্রয়োজনীয় শর্তসমূহ অপূর্ণ রয়েছে।');
       return;
     }
 
@@ -101,6 +128,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
     } else {
       const res = await createScheduledLink({
         target_date: targetDate,
+        target_time: targetTime,
         post_type: postType,
         caption: caption.trim() || 'No caption',
         instruction: instruction.trim() || 'Like and Comment',
@@ -125,6 +153,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
     setInstruction(s.instruction);
     setFbLink(s.fb_link);
     setTargetDate(s.target_date);
+    setTargetTime(s.target_time || '12:00');
     setErrorMsg('');
     setSuccessMsg('');
   };
@@ -159,7 +188,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
             <div>
               <h2 className="text-lg font-bold text-white">আগাম লিংক শিডিউলিং (Scheduling)</h2>
               <p className="text-xs text-slate-400">
-                পরবর্তী দিনের সাপোর্ট লিংক আগে থেকেই প্রস্তুত ও শিডিউল করে রাখুন
+                যেকোনো সময় আগাম লিংক শিডিউল প্রস্তুত করুন • এক্সিকিউশন সময় ১২:০০ PM - ০৪:০০ PM BDT
               </p>
             </div>
           </div>
@@ -171,26 +200,52 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
           </button>
         </div>
 
-        {/* Schedule Opening Notice */}
-        <div
-          className={`px-5 py-3 border-b text-xs flex items-center justify-between ${
-            scheduleCheck.isAllowed || isAdmin
-              ? 'bg-emerald-950/40 border-emerald-800/40 text-emerald-300'
-              : 'bg-amber-950/40 border-amber-800/40 text-amber-300'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 shrink-0" />
-            <span>
-              {isAdmin
-                ? 'এডমিন এক্সেস: যেকোনো সময়ের জন্য আনলিমিটেড শিডিউল প্রস্তুত করতে পারবেন।'
-                : scheduleCheck.message}
-            </span>
+        {/* Member Schedule Eligibility Checklist */}
+        {!isAdmin && (
+          <div className="bg-slate-950 p-4 border-b border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-purple-400" />
+                <span>শিডিউল ব্যবহারের যোগ্যতা (Eligibility Status)</span>
+              </span>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                isMemberEligible ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+              }`}>
+                {isMemberEligible ? 'যোগ্য (Eligible)' : 'শর্ত অপূর্ণ'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+              <div className={`flex items-center gap-2 p-2 rounded-lg border ${
+                !hasPendingSupport ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${!hasPendingSupport ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <span>আজকের সাপোর্ট সম্পন্ন: {!hasPendingSupport ? 'হ্যাঁ' : `${pendingRequiredSupportCount} টি বাকি`}</span>
+              </div>
+
+              <div className={`flex items-center gap-2 p-2 rounded-lg border ${
+                isAllDoneCompleted ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${isAllDoneCompleted ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <span>আজকের All Done সম্পন্ন: {isAllDoneCompleted ? 'হ্যাঁ' : 'না (৫:০০ PM এর পর করুন)'}</span>
+              </div>
+
+              <div className={`flex items-center gap-2 p-2 rounded-lg border ${
+                !hasWeeklyFakeAllDone ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-300' : 'bg-red-950/30 border-red-800/40 text-red-300'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${!hasWeeklyFakeAllDone ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                <span>সাপ্তাহিক ফেক অল ডান রিপোর্ট: {!hasWeeklyFakeAllDone ? 'ক্লিন' : 'পেনাল্টি কার্যকর'}</span>
+              </div>
+
+              <div className={`flex items-center gap-2 p-2 rounded-lg border ${
+                isSchedulePermissionEnabled ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-300' : 'bg-red-950/30 border-red-800/40 text-red-300'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${isSchedulePermissionEnabled ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                <span>এডমিন শিডিউল পারমিশন: {isSchedulePermissionEnabled ? 'অনুমোদিত' : 'বন্ধ'}</span>
+              </div>
+            </div>
           </div>
-          <span className="font-mono font-bold text-[11px] bg-slate-950/60 px-2 py-0.5 rounded">
-            আগামীকাল: {tomorrowDate}
-          </span>
-        </div>
+        )}
 
         <div className="p-5 overflow-y-auto space-y-6">
           {/* Alerts */}
@@ -225,7 +280,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
                   তারিখ (Target Date)
@@ -237,6 +292,27 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
                   onChange={(e) => setTargetDate(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  পোস্ট সময় (12 PM - 4 PM)
+                </label>
+                <select
+                  value={targetTime}
+                  onChange={(e) => setTargetTime(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                >
+                  <option value="12:00">12:00 PM (দুপুর ১২:০০)</option>
+                  <option value="12:30">12:30 PM (দুপুর ১২:৩০)</option>
+                  <option value="13:00">01:00 PM (দুপুর ০১:০০)</option>
+                  <option value="13:30">01:30 PM (দুপুর ০১:৩০)</option>
+                  <option value="14:00">02:00 PM (দুপুর ০২:০০)</option>
+                  <option value="14:30">02:30 PM (দুপুর ০২:৩০)</option>
+                  <option value="15:00">03:00 PM (বিকাল ০৩:০০)</option>
+                  <option value="15:30">03:30 PM (বিকাল ০৩:৩০)</option>
+                  <option value="16:00">04:00 PM (বিকাল ০৪:০০)</option>
+                </select>
               </div>
 
               <div>
@@ -254,7 +330,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
                     }`}
                   >
                     <Image className="w-3.5 h-3.5" />
-                    <span>ছবি (Photo)</span>
+                    <span>ছবি</span>
                   </button>
                   <button
                     type="button"
@@ -266,7 +342,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
                     }`}
                   >
                     <Video className="w-3.5 h-3.5" />
-                    <span>ভিডিও / রিলস</span>
+                    <span>ভিডিও</span>
                   </button>
                 </div>
               </div>
@@ -314,7 +390,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
 
             <button
               type="submit"
-              disabled={isSubmitting || (!isAdmin && !scheduleCheck.isAllowed && !editingScheduleId)}
+              disabled={isSubmitting || (!isAdmin && !isMemberEligible && !editingScheduleId)}
               className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 disabled:opacity-40 transition flex items-center justify-center gap-2"
             >
               {isSubmitting && (
@@ -356,7 +432,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="bg-purple-900/60 text-purple-300 px-2 py-0.5 rounded text-[10px] font-mono font-bold border border-purple-800">
-                          {s.target_date}
+                          {s.target_date} {s.target_time ? `@ ${s.target_time} BDT` : ''}
                         </span>
                         <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">
                           {s.post_type}
