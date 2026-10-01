@@ -22,6 +22,7 @@ import {
   Layers,
   Sparkles,
   Bell,
+  Trophy,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SystemSettings, AdminSupportContact } from '../../types';
@@ -32,8 +33,9 @@ import { FESTIVAL_THEMES } from '../../types/festivalTheme';
 import { lifecycleApi } from '../../lib/supabase';
 import { TimePicker12Hour } from '../common/TimePicker12Hour';
 import { getActiveMonetagLink, setActiveMonetagLink, MONETAG_CONFIG } from '../../utils/monetag';
+import { PointSettingsTab } from './PointSettingsTab';
 
-type SettingSectionTab = 'schedule' | 'monetag' | 'rules' | 'contact' | 'recovery' | 'theme' | 'backup' | 'security';
+type SettingSectionTab = 'schedule' | 'points' | 'monetag' | 'rules' | 'contact' | 'recovery' | 'theme' | 'backup' | 'security';
 
 export const AdminSettingsPanel: React.FC = () => {
   const {
@@ -229,6 +231,7 @@ export const AdminSettingsPanel: React.FC = () => {
 
   const menuItems = [
     { id: 'schedule', label: 'সময়সীমা ও সিডিউল', icon: Clock, desc: 'লিংক জমা ও অল ডান সময়' },
+    { id: 'points', label: 'পয়েন্ট সিস্টেম', icon: Trophy, desc: 'পয়েন্ট মান ও পেনাল্টি কনফিগার' },
     { id: 'monetag', label: 'Monetag Ad মনিটাইজেশন', icon: Sparkles, desc: 'স্মার্টলিঙ্ক ও আর্নিং কনফিগার' },
     { id: 'rules', label: 'নিয়ম ও ফ্রি লিমিট', icon: Sliders, desc: 'লেট লিমিট ও থ্রেশহোল্ড' },
     { id: 'contact', label: 'সাপোর্ট হেল্পলাইন', icon: PhoneCall, desc: 'এডমিন ফেসবুক ও হোয়াটসঅ্যাপ' },
@@ -317,6 +320,8 @@ export const AdminSettingsPanel: React.FC = () => {
 
         {/* Settings Grouped Content Cards (iOS / Material List Style) */}
         <div className="lg:col-span-8 space-y-6">
+          {activeTab === 'points' && <PointSettingsTab />}
+
           {/* Section 1: Time & Schedule Settings */}
           {activeTab === 'schedule' && (
             <form onSubmit={handleSaveSettings} className="space-y-4">

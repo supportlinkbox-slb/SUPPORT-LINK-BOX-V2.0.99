@@ -767,3 +767,18 @@ USING (true);
 -- INITIAL SEED
 INSERT INTO public.communities (id, name, description) VALUES ('main', 'Support Link Box Official', 'Primary partition') ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.settings (community_id) VALUES ('main') ON CONFLICT (community_id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.consume_my_pending_invite(p_token_hash TEXT)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v_auth UUID := auth.uid(); v_tok public.invite_tokens%ROWTYPE;
+BEGIN
+  IF v_auth IS NULL THEN RETURN jsonb_build_object('success', false, 'reason', 'NO_SESSION'); END IF;
+  IF p_token_hash IS NULL OR p_token_hash = '' THEN RETURN jsonb_build_object('success', false, 'reason', 'NO_TOKEN'); END IF;
+  SELECT * INTO v_tok FROM public.invite_tokens WHERE token_hash = p_token_hash FOR UPDATE;
+  IF NOT FOUND OR v_tok.status <> 'ACTIVE' OR v_tok.expires_at <= NOW() THEN
+    RETURN jsonb_build_object('success', false, 'reason', 'INVALID_TOKEN');
+  END IF;
+  UPDATE public.invite_tokens SET status = 'USED', used_at = NOW(), used_by = v_auth, updated_at = NOW() WHERE id = v_tok.id;
+  RETURN jsonb_build_object('success', true);
+END; $$;
+GRANT EXECUTE ON FUNCTION public.consume_my_pending_invite(TEXT) TO authenticated;

@@ -691,6 +691,20 @@ export const membersApi = {
       return { success: false, error: formatSupabaseError(err) };
     }
   },
+
+  async setSchedulePermission(targetId: string, allowed: boolean): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+      const { data, error } = await supabase.rpc('set_member_schedule_permission_secure', {
+        p_target_member_id: targetId,
+        p_allowed: allowed,
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
 };
 
 /**
@@ -1054,9 +1068,10 @@ export const configApi = {
       const { data, error } = await supabase
         .from('settings')
         .select('*')
-        .eq('id', 'default')
-        .single();
+        .eq('community_id', 'main')
+        .maybeSingle();
       if (error) return { success: false, error: formatSupabaseError(error) };
+      if (!data) return { success: false, error: 'Settings row not found' };
       return { success: true, data: data as SystemConfig };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
@@ -1068,15 +1083,49 @@ export const configApi = {
       if (!isSupabaseConfigured) return { success: true, data: updates as SystemConfig };
       const { data, error } = await supabase
         .from('settings')
-        .upsert({
-          id: 'default',
+        .update({
           ...updates,
           updated_at: new Date().toISOString()
         })
+        .eq('community_id', 'main')
         .select()
         .single();
       if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data: data as SystemConfig };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async getPointSettings(): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true, data: {} };
+      const { data, error } = await supabase.rpc('get_point_settings_secure');
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
+
+  async updatePointSettings(patch: Record<string, number>): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: true };
+      const { data, error } = await supabase.rpc('update_point_settings_secure', {
+        p_points_daily_link_submit: patch.points_daily_link_submit,
+        p_points_per_support: patch.points_per_support,
+        p_points_all_done: patch.points_all_done,
+        p_points_fastest_top1: patch.points_fastest_top1,
+        p_points_fastest_top2: patch.points_fastest_top2,
+        p_points_fastest_top3: patch.points_fastest_top3,
+        p_points_fastest_top4: patch.points_fastest_top4,
+        p_points_fastest_top5: patch.points_fastest_top5,
+        p_penalty_late_support: patch.penalty_late_support,
+        p_penalty_fake_all_done: patch.penalty_fake_all_done,
+        p_penalty_inactive: patch.penalty_inactive,
+      });
+      if (error) return { success: false, error: formatSupabaseError(error) };
+      return { success: true, data };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }

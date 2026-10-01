@@ -272,6 +272,7 @@ interface AppContextType {
 
   // System Settings Update
   updateSystemSettings: (updates: Partial<SystemConfig>) => Promise<{ success: boolean; error?: string }>;
+  updatePointSettings: (patch: Record<string, number>) => Promise<{ success: boolean; error?: string }>;
 
   // Festival Theme System (Admin-Controlled & Time-Bound)
   activeFestivalTheme: ActiveThemeState;
@@ -931,6 +932,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       setCurrentUser(prof.data);
+
+      const pendingToken = localStorage.getItem('slb_pending_invite_token');
+      if (pendingToken) {
+        try {
+          await supabase.rpc('consume_my_pending_invite', { p_token_hash: pendingToken });
+        } catch (consumeErr) {
+          console.error('Failed to consume stashed pending invite:', consumeErr);
+        } finally {
+          localStorage.removeItem('slb_pending_invite_token');
+        }
+      }
+
       await refreshData();
       return { success: true };
     }
@@ -1001,12 +1014,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return { success: false, error: res.error };
         }
         
-        if (res.data?.session && data.tokenHash) {
-           // User just signed up and has a session. Consume the invite token before signing out.
-           const consumeRes = await supabase.rpc('consume_invite_token_tx', { p_token_hash: data.tokenHash });
-           if (consumeRes.error || !consumeRes.data?.success) {
-              console.error('Invite consume error:', consumeRes.error || consumeRes.data?.reason);
-           }
+        if (data.tokenHash) {
+          localStorage.setItem('slb_pending_invite_token', data.tokenHash);
         }
 
         // Complete zero-login enforcement: Always sign out
@@ -2624,11 +2633,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from('members')
-        .update({ can_schedule_links: canSchedule, updated_at: new Date().toISOString() })
-        .eq('id', targetId);
-      if (error) return { success: false, error: error.message };
+      const res = await membersApi.setSchedulePermission(targetId, canSchedule);
+      if (!res.success) return { success: false, error: res.error };
       await refreshData();
       return { success: true };
     }
@@ -2642,6 +2648,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       targetId,
       `${canSchedule ? 'Enabled' : 'Disabled'} scheduling permission for member`
     );
+    return { success: true };
+  };
+
+  const updatePointSettings = async (patch: Record<string, number>) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'এডমিন অনুমতি প্রয়োজন।' };
+    }
+
+    if (isSupabaseConfigured) {
+      const res = await configApi.updatePointSettings(patch);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+    } else {
+      const mergedConfig = {
+        ...systemConfig,
+        ...patch,
+      };
+      setSystemConfig(mergedConfig as any);
+      localStorage.setItem('slb_system_config', JSON.stringify(mergedConfig));
+    }
+
+    addAuditLog('POINT_SETTINGS_UPDATED', 'SETTINGS', 'SYSTEM', `Admin ${currentUser.name} updated point value parameters`);
+    await refreshData();
     return { success: true };
   };
 
@@ -2755,6 +2785,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     auditLogs,
     refreshData,
     updateSystemSettings,
+    updatePointSettings,
     activeFestivalTheme,
     currentThemeConfig,
     setActiveFestivalThemeState,
