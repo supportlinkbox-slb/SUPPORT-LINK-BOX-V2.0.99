@@ -57,7 +57,7 @@ export const AdminInviteList: React.FC = () => {
       setInvites(invites.map(inv => inv.id === id ? { ...inv, status: 'REVOKED' } : inv));
     } catch (err: any) {
       console.error(err);
-      alert('ইনভাইট বাতিল করতে সমস্যা হয়েছে।');
+      setErrorMsg('ইনভাইট বাতিল করতে সমস্যা হয়েছে।');
     }
   };
 

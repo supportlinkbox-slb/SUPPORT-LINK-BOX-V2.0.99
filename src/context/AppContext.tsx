@@ -848,6 +848,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, []);
 
+  // Gentle background runner fallback for due scheduled links during 12:00 - 16:00 BDT
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) return;
+    
+    // Check every 60 seconds if in active tab
+    const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      try {
+        const res = await scheduledLinksApi.runDueScheduledLinksSecure();
+        if (res.success && res.data && res.data.executed_count > 0) {
+          await refreshData();
+        }
+      } catch {}
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [currentUser, isSupabaseConfigured, refreshData]);
+
   // Window status checks (reacts dynamically to time tick)
   const submissionStatus = useMemo(() => {
     return isWithinSubmissionWindow(

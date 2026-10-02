@@ -100,6 +100,7 @@ export const AdminSettingsPanel: React.FC = () => {
   });
 
   const [isSavedNotice, setIsSavedNotice] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [selectedInactivityDays, setSelectedInactivityDays] = useState<3 | 7>(3);
@@ -108,6 +109,11 @@ export const AdminSettingsPanel: React.FC = () => {
   const [cutoffResult, setCutoffResult] = useState<{ count: number; date: string; members: string[] } | null>(null);
   const [isArchivingSheets, setIsArchivingSheets] = useState(false);
   const [archiveResult, setArchiveResult] = useState<{ rows: number; checksum: string; status: string } | null>(null);
+
+  const showError = (msg: string) => {
+    setActionError(msg);
+    setTimeout(() => setActionError(null), 4000);
+  };
 
   const handleRun10amCutoff = async () => {
     if (!confirm('আপনি কি পূর্ববর্তী দিনের ১০:০০ AM BDT রিকভারি কাট-অফ চেক রান করতে চান? বকেয়া সাপোর্ট সম্পন্ন না করা মেম্বাররা স্বয়ংক্রিয়ভাবে সাসপেন্ড হবে।')) return;
@@ -123,10 +129,10 @@ export const AdminSettingsPanel: React.FC = () => {
         });
         await refreshData();
       } else {
-        alert(res.error || 'কাট-অফ রান ব্যর্থ হয়েছে।');
+        showError(res.error || 'কাট-অফ রান ব্যর্থ হয়েছে।');
       }
     } catch (err: any) {
-      alert(err.message || 'ত্রুটি ঘটেছে');
+      showError(err.message || 'ত্রুটি ঘটেছে');
     } finally {
       setIsRunning10amCutoff(false);
     }
@@ -144,10 +150,10 @@ export const AdminSettingsPanel: React.FC = () => {
           status: res.data.status || 'VERIFIED',
         });
       } else {
-        alert(res.error || 'গুগল শিটস অটো আর্কাইভ ব্যর্থ হয়েছে।');
+        showError(res.error || 'গুগল শিটস অটো আর্কাইভ ব্যর্থ হয়েছে।');
       }
     } catch (err: any) {
-      alert(err.message || 'ত্রুটি ঘটেছে');
+      showError(err.message || 'ত্রুটি ঘটেছে');
     } finally {
       setIsArchivingSheets(false);
     }
@@ -174,10 +180,10 @@ export const AdminSettingsPanel: React.FC = () => {
         setIsSavedNotice(true);
         setTimeout(() => setIsSavedNotice(false), 3000);
       } else {
-        alert(res.error || 'সেটিংস আপডেট করতে ব্যর্থ হয়েছে।');
+        showError(res.error || 'সেটিংস আপডেট করতে ব্যর্থ হয়েছে।');
       }
     } catch (err: any) {
-      alert(err.message || 'সেটিংস সেভ করতে ব্যর্থ হয়েছে।');
+      showError(err.message || 'সেটিংস সেভ করতে ব্যর্থ হয়েছে।');
     } finally {
       setIsSaving(false);
     }
@@ -189,7 +195,7 @@ export const AdminSettingsPanel: React.FC = () => {
       setIsSavedNotice(true);
       setTimeout(() => setIsSavedNotice(false), 3000);
     } catch (err) {
-      alert('হেল্পলাইন তথ্য সেভ করতে সমস্যা হয়েছে।');
+      showError('হেল্পলাইন তথ্য সেভ করতে সমস্যা হয়েছে।');
     }
   };
 
@@ -264,6 +270,13 @@ export const AdminSettingsPanel: React.FC = () => {
           <div className="px-4 py-2 rounded-2xl bg-emerald-950 border border-emerald-800 text-emerald-400 text-xs font-bold flex items-center gap-2 animate-bounce shadow-lg">
             <CheckCircle2 className="w-4 h-4" />
             <span>সেটিংস সংরক্ষিত হয়েছে!</span>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="px-4 py-2 rounded-2xl bg-red-950 border border-red-800 text-red-400 text-xs font-bold flex items-center gap-2 shadow-lg">
+            <AlertTriangle className="w-4 h-4" />
+            <span>{actionError}</span>
           </div>
         )}
       </div>

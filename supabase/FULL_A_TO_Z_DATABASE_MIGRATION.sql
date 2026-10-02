@@ -296,28 +296,34 @@ DECLARE
     v_caller_role user_role;
 BEGIN
     -- If executed inside a trusted SECURITY DEFINER function owned by superuser/postgres/service_role, allow internal system mutations
-    IF v_db_user IN ('postgres', 'supabase_admin', 'service_role') OR v_role_setting = 'service_role' THEN
+    IF v_db_user IN ('postgres', 'supabase_admin') OR v_role_setting = 'service_role' THEN
         NEW.updated_at := NOW();
         RETURN NEW;
     END IF;
 
     -- Direct client write over REST/GraphQL API
     IF v_role_setting IN ('authenticated', 'anon') THEN
+        -- CRITICAL RULE: NO ONE (neither Member nor Admin) can directly alter points/ledger columns on the table!
+        -- All point alterations must be logged to the immutable ledger via secure RPCs.
+        IF NEW.points IS DISTINCT FROM OLD.points OR
+           NEW.weekly_points IS DISTINCT FROM OLD.weekly_points OR
+           NEW.monthly_points IS DISTINCT FROM OLD.monthly_points OR
+           NEW.daily_points IS DISTINCT FROM OLD.daily_points OR
+           NEW.total_links_submitted IS DISTINCT FROM OLD.total_links_submitted THEN
+            RAISE EXCEPTION 'PERMISSION_DENIED: Direct modification of points is forbidden. All point adjustments must go through ledger RPCs.';
+        END IF;
+
         -- Check caller's role from members table
         SELECT role INTO v_caller_role FROM public.members WHERE auth_user_id = auth.uid();
 
-        -- Non-admins/non-developers cannot mutate protected security fields directly
+        -- Non-admins/non-developers cannot mutate role, status, member_number, can_schedule_links, community_id
         IF v_caller_role IS NULL OR (v_caller_role <> 'ADMIN' AND v_caller_role <> 'DEVELOPER') THEN
             IF NEW.role IS DISTINCT FROM OLD.role OR
-               NEW.points IS DISTINCT FROM OLD.points OR
-               NEW.weekly_points IS DISTINCT FROM OLD.weekly_points OR
-               NEW.monthly_points IS DISTINCT FROM OLD.monthly_points OR
-               NEW.daily_points IS DISTINCT FROM OLD.daily_points OR
-               NEW.member_number IS DISTINCT FROM OLD.member_number OR
                NEW.status IS DISTINCT FROM OLD.status OR
+               NEW.member_number IS DISTINCT FROM OLD.member_number OR
                NEW.can_schedule_links IS DISTINCT FROM OLD.can_schedule_links OR
                NEW.community_id IS DISTINCT FROM OLD.community_id THEN
-                RAISE EXCEPTION 'PERMISSION_DENIED: Direct client modification of protected security fields (role, points, status) is strictly forbidden.';
+                RAISE EXCEPTION 'PERMISSION_DENIED: Direct client modification of protected security fields (role, status) is strictly forbidden.';
             END IF;
         END IF;
     END IF;
@@ -667,8 +673,8 @@ DECLARE
     v_earned INTEGER := 5;
     v_executed_count INT := 0;
 BEGIN
-    -- HARD RULE #8: Window Enforcement (12:00 - 16:00 BDT) unless invoked by admin
-    IF v_curr_hour < 12 OR v_curr_hour >= 16 THEN
+    -- HARD RULE #8: Window Enforcement (12:00 PM - 4:00 PM BDT) unless invoked by admin
+    IF v_now_bdt::time < '12:00:00'::time OR v_now_bdt::time > '16:05:00'::time THEN
         IF auth.uid() IS NOT NULL THEN
             IF NOT EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')) THEN
                 RETURN jsonb_build_object('success', false, 'error', 'WINDOW_CLOSED: Automated execution window is 12:00 PM to 4:00 PM BDT.');
@@ -944,3 +950,95 @@ BEGIN
   RETURN jsonb_build_object('success', true);
 END; $$;
 GRANT EXECUTE ON FUNCTION public.consume_my_pending_invite(TEXT) TO authenticated;
+
+-- 8. ADMIN MANUAL POINTS ADJUSTMENT RPC (Immutable ledger + audit log recorded)
+CREATE OR REPLACE FUNCTION public.admin_adjust_points_secure(
+    p_member_id UUID,
+    p_amount INTEGER,
+    p_reason TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_caller public.members%ROWTYPE;
+    v_target public.members%ROWTYPE;
+    v_today_bdt DATE := (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::DATE;
+BEGIN
+    SELECT * INTO v_caller FROM public.members WHERE auth_user_id = auth.uid();
+    IF v_caller.id IS NULL OR v_caller.role NOT IN ('ADMIN', 'DEVELOPER') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'UNAUTHORIZED: Admin or Developer privilege required.');
+    END IF;
+
+    SELECT * INTO v_target FROM public.members WHERE id = p_member_id;
+    IF v_target.id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'MEMBER_NOT_FOUND');
+    END IF;
+
+    -- Record in point_transactions immutable ledger
+    INSERT INTO public.point_transactions (
+        member_id,
+        activity_type,
+        points,
+        date,
+        reference_id,
+        description
+    ) VALUES (
+        v_target.id,
+        'ADMIN_ADJUSTMENT',
+        p_amount,
+        v_today_bdt,
+        v_caller.id::text,
+        COALESCE(p_reason, 'Manual point adjustment by Admin ' || v_caller.name)
+    );
+
+    -- Update member balance atomically
+    UPDATE public.members
+    SET points = GREATEST(0, points + p_amount),
+        weekly_points = GREATEST(0, weekly_points + p_amount),
+        updated_at = NOW()
+    WHERE id = v_target.id;
+
+    -- Record audit log
+    INSERT INTO public.audit_logs (actor_id, actor_name, actor_role, action, target_type, target_id, details)
+    VALUES (v_caller.id, v_caller.name, v_caller.role::text, 'MANUAL_POINT_ADJUSTMENT', 'MEMBER', v_target.id::text, 'Adjusted ' || p_amount::text || ' points: ' || COALESCE(p_reason, ''));
+
+    RETURN jsonb_build_object('success', true, 'new_points', GREATEST(0, v_target.points + p_amount));
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.admin_adjust_points_secure(UUID, INTEGER, TEXT) TO authenticated;
+
+-- 9. PG_CRON AUTOMATED BACKGROUND RUNNER
+-- Automatically invokes run_due_scheduled_links_secure() every 2 minutes.
+-- The runner internally verifies 12:00 PM - 04:00 PM BDT execution window and target_time.
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
+EXCEPTION WHEN OTHERS THEN
+    BEGIN
+        CREATE EXTENSION IF NOT EXISTS pg_cron;
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+END $$;
+
+DO $$
+BEGIN
+    PERFORM cron.unschedule('slb-run-due-scheduled-links');
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+
+DO $$
+BEGIN
+    PERFORM cron.schedule(
+        'slb-run-due-scheduled-links',
+        '*/2 * * * *',
+        $$SELECT public.run_due_scheduled_links_secure()$$
+    );
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+

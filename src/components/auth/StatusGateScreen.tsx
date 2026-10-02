@@ -12,19 +12,20 @@ interface StatusGateScreenProps {
 export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
   const { logout, updateMemberStatus } = useApp();
   const [isAdOpen, setIsAdOpen] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleAdCompleted = async () => {
     // Invoke server-side ad recovery RPC instead of direct client-side status update
     try {
       const { error } = await supabase.rpc('rpc_complete_ad_recovery', { p_member_id: user.id });
       if (error) {
-        alert('রিকভারিতে সমস্যা হয়েছে: ' + error.message);
+        setFeedback({ type: 'error', message: 'রিকভারিতে সমস্যা হয়েছে: ' + error.message });
       } else {
-        alert('আপনার রিকভারি সফল হয়েছে। পেজ রিফ্রেশ করুন।');
-        window.location.reload();
+        setFeedback({ type: 'success', message: 'আপনার রিকভারি সফল হয়েছে। পেজ রিফ্রেশ করুন।' });
+        setTimeout(() => window.location.reload(), 1500);
       }
     } catch {
-      alert('সার্ভার রিকভারি রেসপন্স দিতে পারেনি। এডমিনের সাথে যোগাযোগ করুন।');
+      setFeedback({ type: 'error', message: 'সার্ভার রিকভারি রেসপন্স দিতে পারেনি। এডমিনের সাথে যোগাযোগ করুন।' });
     }
   };
 
@@ -81,6 +82,18 @@ export const StatusGateScreen: React.FC<StatusGateScreenProps> = ({ user }) => {
           <h1 className="text-xl font-bold text-white tracking-tight">{statusInfo.title}</h1>
           <p className="text-xs text-slate-400 leading-relaxed">{statusInfo.description}</p>
         </div>
+
+        {feedback && (
+          <div
+            className={`p-3 rounded-2xl text-xs font-bold border ${
+              feedback.type === 'success'
+                ? 'bg-emerald-950/70 border-emerald-800 text-emerald-400'
+                : 'bg-red-950/70 border-red-800 text-red-400'
+            }`}
+          >
+            {feedback.message}
+          </div>
+        )}
 
         {/* Member Profile Summary Card */}
         <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 text-left space-y-2 text-xs">

@@ -1,0 +1,21 @@
+{
+  "short_name": "SLB",
+  "name": "Support Link Box",
+  "icons": [
+    {
+      "src": "/assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#020617",
+  "theme_color": "#06b6d4",
+  "display": "standalone",
+  "orientation": "portrait"
+}
