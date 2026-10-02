@@ -361,7 +361,10 @@ DECLARE
     v_name VARCHAR(100);
     v_fb_url TEXT;
     v_profile_photo TEXT;
+    v_is_first BOOLEAN;
 BEGIN
+    SELECT NOT EXISTS (SELECT 1 FROM public.members) INTO v_is_first;
+
     v_name := COALESCE(NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'facebook_name', 'Member');
     v_fb_url := COALESCE(NEW.raw_user_meta_data->>'facebook_url', NEW.raw_user_meta_data->>'facebook_profile_url', 'https://facebook.com');
     v_profile_photo := NEW.raw_user_meta_data->>'profile_photo_url';
@@ -389,8 +392,8 @@ BEGIN
         NEW.email,
         v_fb_url,
         v_profile_photo,
-        'MEMBER',
-        'PENDING'
+        CASE WHEN v_is_first THEN 'ADMIN'::user_role ELSE 'MEMBER'::user_role END,
+        CASE WHEN v_is_first THEN 'ACTIVE'::member_status ELSE 'PENDING'::member_status END
     )
     ON CONFLICT (auth_user_id) DO NOTHING;
 
@@ -578,6 +581,12 @@ BEGIN
 END;
 $$;
 
+-- Add scheduled links status additions if missing
+ALTER TABLE public.scheduled_links ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.scheduled_links ADD COLUMN IF NOT EXISTS published_link_id UUID;
+ALTER TABLE public.scheduled_links ADD COLUMN IF NOT EXISTS executed_at TIMESTAMPTZ;
+ALTER TABLE public.scheduled_links ADD COLUMN IF NOT EXISTS error_message TEXT;
+
 -- Scheduled Link Creation RPC
 CREATE OR REPLACE FUNCTION public.create_scheduled_link_secure(
     p_target_date DATE,
@@ -621,6 +630,10 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'INVALID_TARGET_DATE: Date cannot be in the past.');
     END IF;
 
+    IF p_target_time::time < '12:00:00'::time OR p_target_time::time > '16:00:00'::time THEN
+        RETURN jsonb_build_object('success', false, 'error', 'INVALID_TIME: Scheduled execution is allowed only between 12:00 PM and 4:00 PM BDT.');
+    END IF;
+
     IF p_target_date = v_today_bdt AND (p_target_time::time <= v_now_bdt::time) THEN
         RETURN jsonb_build_object('success', false, 'error', 'INVALID_TARGET_TIME: Same-day schedule time must be in the future.');
     END IF;
@@ -647,8 +660,11 @@ DECLARE
     v_today_bdt DATE := v_now_bdt::DATE;
     v_curr_hour INT := EXTRACT(HOUR FROM v_now_bdt);
     v_sched RECORD;
+    v_owner public.members%ROWTYPE;
     v_next_serial INT;
     v_part INT;
+    v_link_id UUID;
+    v_earned INTEGER := 5;
     v_executed_count INT := 0;
 BEGIN
     -- HARD RULE #8: Window Enforcement (12:00 - 16:00 BDT) unless invoked by admin
@@ -665,23 +681,84 @@ BEGIN
     FOR v_sched IN
         SELECT sl.* FROM public.scheduled_links sl
         WHERE sl.target_date = v_today_bdt AND sl.status = 'pending'
-        ORDER BY sl.created_at ASC
+          AND (sl.target_time IS NULL OR sl.target_time::time <= v_now_bdt::time)
+        ORDER BY sl.target_time ASC, sl.created_at ASC
     LOOP
-        PERFORM pg_advisory_xact_lock(123456789);
+        -- Wrap each iteration in its own block for independent failure tracking
+        BEGIN
+            -- 1. Fetch and Verify Owner eligibility
+            SELECT * INTO v_owner FROM public.members WHERE id = v_sched.owner_id;
+            IF NOT FOUND OR v_owner.status <> 'ACTIVE' THEN
+                UPDATE public.scheduled_links 
+                SET status = 'failed', error_message = 'OWNER_INACTIVE', executed_at = NOW() 
+                WHERE id = v_sched.id;
+                CONTINUE;
+            END IF;
 
-        SELECT COALESCE(MAX(serial_number), 0) + 1 INTO v_next_serial
-        FROM public.daily_links WHERE date = v_today_bdt AND community_id = v_sched.community_id;
+            IF v_owner.can_schedule_links = false THEN
+                UPDATE public.scheduled_links 
+                SET status = 'failed', error_message = 'SCHEDULING_DISABLED', executed_at = NOW() 
+                WHERE id = v_sched.id;
+                CONTINUE;
+            END IF;
 
-        v_part := ((v_next_serial - 1) / 20) + 1;
+            -- Check duplicate daily link for owner today
+            IF EXISTS (
+                SELECT 1 FROM public.daily_links 
+                WHERE owner_id = v_sched.owner_id AND date = v_today_bdt AND status <> 'cancelled'
+            ) THEN
+                UPDATE public.scheduled_links 
+                SET status = 'failed', error_message = 'DUPLICATE_LINK', executed_at = NOW() 
+                WHERE id = v_sched.id;
+                CONTINUE;
+            END IF;
 
-        INSERT INTO public.daily_links (
-            community_id, owner_id, member_id, date, serial_number, link_number, serial_display, part_number, post_type, category, caption, instruction, fb_link
-        ) VALUES (
-            v_sched.community_id, v_sched.owner_id, v_sched.owner_id, v_today_bdt, v_next_serial, v_next_serial, 'SL-' || LPAD(v_next_serial::text, 3, '0'), v_part, v_sched.post_type, v_sched.category, v_sched.caption, v_sched.instruction, v_sched.fb_link
-        );
+            -- 2. Clean serial generation using daily community advisory lock
+            PERFORM pg_advisory_xact_lock(hashtext('slb_daily_link_' || v_sched.community_id || '_' || v_today_bdt::text));
 
-        UPDATE public.scheduled_links SET status = 'executed', updated_at = NOW() WHERE id = v_sched.id;
-        v_executed_count := v_executed_count + 1;
+            SELECT COALESCE(MAX(serial_number), 0) + 1 INTO v_next_serial
+            FROM public.daily_links 
+            WHERE date = v_today_bdt AND community_id = v_sched.community_id;
+
+            v_part := ((v_next_serial - 1) / 20) + 1;
+            v_link_id := gen_random_uuid();
+
+            -- 3. Insert into daily_links
+            INSERT INTO public.daily_links (
+                id, community_id, owner_id, member_id, date, serial_number, link_number, serial_display, part_number, post_type, category, caption, instruction, fb_link, status, submitted_at
+            ) VALUES (
+                v_link_id, v_sched.community_id, v_sched.owner_id, v_sched.owner_id, v_today_bdt, v_next_serial, v_next_serial, 'SL-' || LPAD(v_next_serial::text, 3, '0'), v_part, v_sched.post_type, v_sched.category, v_sched.caption, v_sched.instruction, v_sched.fb_link, 'active', NOW()
+            );
+
+            -- 4. Read earning points configuration
+            SELECT COALESCE(points_daily_link_submit, 5) INTO v_earned 
+            FROM public.settings WHERE community_id = 'main';
+
+            -- 5. Write to point transaction ledger (Fix 1)
+            INSERT INTO public.point_transactions (member_id, activity_type, points, date, reference_id, description)
+            VALUES (v_sched.owner_id, 'LINK_SUBMIT', v_earned, v_today_bdt, v_link_id::text, 'Scheduled Link #' || v_next_serial || ' (auto-published)');
+
+            -- 6. Update member balance and active metadata
+            UPDATE public.members 
+            SET points = points + v_earned, 
+                weekly_points = weekly_points + v_earned, 
+                total_links_submitted = total_links_submitted + 1, 
+                last_active_date = v_today_bdt 
+            WHERE id = v_sched.owner_id;
+
+            -- 7. Update scheduled_links state on success
+            UPDATE public.scheduled_links 
+            SET status = 'published', is_published = true, published_link_id = v_link_id, executed_at = NOW(), error_message = NULL
+            WHERE id = v_sched.id;
+
+            v_executed_count := v_executed_count + 1;
+
+        EXCEPTION WHEN OTHERS THEN
+            -- Record failure and continue
+            UPDATE public.scheduled_links 
+            SET status = 'failed', error_message = SQLERRM, executed_at = NOW() 
+            WHERE id = v_sched.id;
+        END;
     END LOOP;
 
     RETURN jsonb_build_object('success', true, 'executed_count', v_executed_count);
@@ -750,9 +827,11 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.point_transactions ENABLE ROW LEVEL SECURITY;
 
+-- Communities
 DROP POLICY IF EXISTS "Public communities read" ON public.communities;
 CREATE POLICY "Public communities read" ON public.communities FOR SELECT USING (true);
 
+-- Settings
 DROP POLICY IF EXISTS "Public read settings" ON public.settings;
 CREATE POLICY "Public read settings" ON public.settings FOR SELECT USING (true);
 
@@ -760,9 +839,92 @@ DROP POLICY IF EXISTS "Admin update settings" ON public.settings;
 CREATE POLICY "Admin update settings" ON public.settings FOR ALL TO authenticated
 USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
 
+-- Members RLS (Ironclad)
 DROP POLICY IF EXISTS "Members view directory" ON public.members;
-CREATE POLICY "Members view directory" ON public.members FOR SELECT TO authenticated
-USING (true);
+CREATE POLICY "Members view directory" ON public.members FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Members update own profile" ON public.members;
+CREATE POLICY "Members update own profile" ON public.members FOR UPDATE TO authenticated
+USING (auth.uid() = auth_user_id)
+WITH CHECK (auth.uid() = auth_user_id);
+
+DROP POLICY IF EXISTS "Admins update all profiles" ON public.members;
+CREATE POLICY "Admins update all profiles" ON public.members FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- Daily Links RLS (Users must use rpc to insert/modify)
+DROP POLICY IF EXISTS "Anyone read daily links" ON public.daily_links;
+CREATE POLICY "Anyone read daily links" ON public.daily_links FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admins manage daily links" ON public.daily_links;
+CREATE POLICY "Admins manage daily links" ON public.daily_links FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- Scheduled Links RLS
+DROP POLICY IF EXISTS "Members view own scheduled links" ON public.scheduled_links;
+CREATE POLICY "Members view own scheduled links" ON public.scheduled_links FOR SELECT TO authenticated
+USING (owner_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()) OR EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+DROP POLICY IF EXISTS "Admins manage all scheduled links" ON public.scheduled_links;
+CREATE POLICY "Admins manage all scheduled links" ON public.scheduled_links FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- Support Records RLS
+DROP POLICY IF EXISTS "Members read support records" ON public.support_records;
+CREATE POLICY "Members read support records" ON public.support_records FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Members insert own support records" ON public.support_records;
+CREATE POLICY "Members insert own support records" ON public.support_records FOR INSERT TO authenticated
+WITH CHECK (supporter_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "Admins manage all support records" ON public.support_records;
+CREATE POLICY "Admins manage all support records" ON public.support_records FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- All Done RLS (Users must use secure rpc to insert)
+DROP POLICY IF EXISTS "Members read all done" ON public.all_done;
+CREATE POLICY "Members read all done" ON public.all_done FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Admins manage all done" ON public.all_done;
+CREATE POLICY "Admins manage all done" ON public.all_done FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- Point Transactions Ledger RLS (Clients can only read, insertion strictly internal via secure rpc)
+DROP POLICY IF EXISTS "Members view own points ledger" ON public.point_transactions;
+CREATE POLICY "Members view own points ledger" ON public.point_transactions FOR SELECT TO authenticated
+USING (member_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()) OR EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- Invite Tokens RLS
+DROP POLICY IF EXISTS "Admins view invite tokens" ON public.invite_tokens;
+CREATE POLICY "Admins view invite tokens" ON public.invite_tokens FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+DROP POLICY IF EXISTS "Admins manage invite tokens" ON public.invite_tokens;
+CREATE POLICY "Admins manage invite tokens" ON public.invite_tokens FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- Reports RLS
+DROP POLICY IF EXISTS "Members view own reports" ON public.reports;
+CREATE POLICY "Members view own reports" ON public.reports FOR SELECT TO authenticated
+USING (reporter_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()) OR EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+DROP POLICY IF EXISTS "Members insert own reports" ON public.reports;
+CREATE POLICY "Members insert own reports" ON public.reports FOR INSERT TO authenticated
+WITH CHECK (reporter_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "Admins manage reports" ON public.reports;
+CREATE POLICY "Admins manage reports" ON public.reports FOR ALL TO authenticated
+USING (EXISTS (SELECT 1 FROM public.members WHERE auth_user_id = auth.uid() AND role IN ('ADMIN', 'DEVELOPER')));
+
+-- Notifications RLS
+DROP POLICY IF EXISTS "Members view own notifications" ON public.notifications;
+CREATE POLICY "Members view own notifications" ON public.notifications FOR SELECT TO authenticated
+USING (member_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "Members update own notifications" ON public.notifications;
+CREATE POLICY "Members update own notifications" ON public.notifications FOR UPDATE TO authenticated
+USING (member_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()))
+WITH CHECK (member_id IN (SELECT id FROM public.members WHERE auth_user_id = auth.uid()));
 
 -- INITIAL SEED
 INSERT INTO public.communities (id, name, description) VALUES ('main', 'Support Link Box Official', 'Primary partition') ON CONFLICT (id) DO NOTHING;

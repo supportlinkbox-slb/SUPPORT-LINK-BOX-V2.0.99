@@ -28,6 +28,7 @@ import {
   Bell,
   PlusCircle,
   Sparkles,
+  Copy,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MemberProfile, UserRole, MemberStatus } from '../../types';
@@ -57,6 +58,7 @@ export const AdminDashboard: React.FC = () => {
     updateMemberStatus,
     deleteDailyLink,
     verifyFakeAllDone,
+    todayDate,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'REQUESTS' | 'MEMBERS' | 'TODAYS_LINKS' | 'SUPPORT_MATRIX' | 'OVERVIEW' | 'INVITE' | 'SETTINGS'>('REQUESTS');
@@ -817,77 +819,300 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {/* TAB 7: TODAY'S LINKS MANAGER */}
-      {activeTab === 'TODAYS_LINKS' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <LinkIcon className="w-5 h-5 text-emerald-400" />
-                <span>আজকের লিংকস ম্যানেজমেন্ট ({dailyLinks.length})</span>
-              </h3>
-              <p className="text-xs text-slate-400">সকলের জমা দেওয়া লিংকের তালিকা, এডিট, ডিলিট ও অ্যাডমিন অ্যাকশন।</p>
-            </div>
-            <button
-              onClick={() => setSubmitLinkTargetMemberId(currentUser?.id || '')}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-500/20 cursor-pointer self-start sm:self-auto"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>লিংক জমা দিন (Admin / Member)</span>
-            </button>
-          </div>
+      {activeTab === 'TODAYS_LINKS' && (() => {
+        // Date & Day formatting for export
+        const dateStr = todayDate || new Date().toISOString().slice(0, 10);
+        const ddmmYy = (() => {
+          try {
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+              return `${parts[2]}-${parts[1]}-${parts[0].slice(-2)}`;
+            }
+          } catch {}
+          return dateStr;
+        })();
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
-                <tr>
-                  <th className="p-3">#Serial</th>
-                  <th className="p-3">Owner</th>
-                  <th className="p-3">Category</th>
-                  <th className="p-3">Post Link</th>
-                  <th className="p-3">Submitted At</th>
-                  <th className="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {dailyLinks.map((link) => (
-                  <tr key={link.id} className="hover:bg-slate-850/50 transition">
-                    <td className="p-3 font-mono font-bold text-cyan-400">#{link.serial_display} (P{link.part_number})</td>
-                    <td className="p-3 font-bold text-white">{link.owner_name} ({link.owner_member_number})</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        link.category === 'VIP' ? 'bg-purple-950 text-purple-300 border border-purple-800' :
-                        link.category === 'ADMIN' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                        'bg-slate-800 text-slate-300'
-                      }`}>
-                        {link.category}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <a href={link.fb_link} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline flex items-center gap-1 max-w-[200px] truncate">
-                        <span className="truncate">{link.fb_link}</span>
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                      </a>
-                    </td>
-                    <td className="p-3 text-slate-400 font-mono">{formatToBDT(link.submitted_at)}</td>
-                    <td className="p-3 text-right">
-                      <button
-                        onClick={async () => {
-                          if (confirm(`আপনি কি সত্যিই #${link.serial_display} লিংকটি ডিলিট করতে চান?`)) {
-                            await deleteDailyLink(link.id);
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded-lg text-[11px] font-bold border border-red-800 transition"
-                      >
-                        ডিলিট
-                      </button>
-                    </td>
+        const banglaDay = (() => {
+          try {
+            const dateObj = new Date(dateStr);
+            const dayIndex = dateObj.getDay();
+            const banglaDays = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
+            return banglaDays[dayIndex];
+          } catch {
+            return 'বৃহস্পতিবার';
+          }
+        })();
+
+        const getEmojiNumber = (num: number): string => {
+          const emojiDigits = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+          return num
+            .toString()
+            .split('')
+            .map((digit) => emojiDigits[parseInt(digit)])
+            .join('');
+        };
+
+        // Plain Text generation for Link List
+        const linkListText = (() => {
+          const maxSerial = dailyLinks.reduce((max, l) => l.serial_number > max ? l.serial_number : max, 0);
+          const lines: string[] = [];
+          lines.push(`📅তারিখ : ${ddmmYy}`);
+          lines.push(`📆বার : ${banglaDay}`);
+          lines.push(`যারা লিংক দিয়েছেন তাদের তালিকা`);
+          lines.push(`                    👇👇👇`);
+          
+          if (maxSerial === 0) {
+            lines.push(`(কোন লিংক পাওয়া যায়নি)`);
+          } else {
+            for (let i = 1; i <= maxSerial; i++) {
+              const link = dailyLinks.find((l) => l.serial_number === i);
+              let displayName = '🚫 𝙉𝙊 𝙋𝙊𝙎𝙏 🚫';
+              if (link && link.status !== 'removed') {
+                displayName = `@${link.owner_name}`;
+              }
+              lines.push(`${getEmojiNumber(i)}➤${displayName}`);
+            }
+          }
+          return lines.join('\n');
+        })();
+
+        // Plain Text generation for All Done List (link serial order)
+        const allDoneListText = (() => {
+          const maxSerial = dailyLinks.reduce((max, l) => l.serial_number > max ? l.serial_number : max, 0);
+          const lines: string[] = [];
+          lines.push(`📅তারিখ : ${ddmmYy}`);
+          lines.push(`📆বার : ${banglaDay}`);
+          lines.push(`যারা সাপোর্ট করেছেন তাদের তালিকা`);
+          lines.push(`                    👇👇👇`);
+          
+          if (maxSerial === 0) {
+            lines.push(`(কোন লিংক পাওয়া যায়নি)`);
+          } else {
+            for (let i = 1; i <= maxSerial; i++) {
+              const link = dailyLinks.find((l) => l.serial_number === i);
+              let lineContent = '';
+              
+              if (!link || link.status === 'removed') {
+                lineContent = '🚫 𝙉𝙊 𝙋𝙊𝙎𝙏 🚫';
+              } else {
+                const adRecord = allDoneRecords.find((r) => r.member_id === link.owner_id && r.status !== 'REVOKED');
+                if (adRecord) {
+                  if (adRecord.alternative_id_used && adRecord.alternative_id_details?.account_name) {
+                    lineContent = `@${link.owner_name} (${adRecord.alternative_id_details.account_name})`;
+                  } else {
+                    lineContent = `@${link.owner_name}`;
+                  }
+                } else {
+                  lineContent = '';
+                }
+              }
+              lines.push(`${getEmojiNumber(i)}➤${lineContent}`);
+            }
+          }
+          return lines.join('\n');
+        })();
+
+        const [copiedLink, setCopiedLink] = React.useState(false);
+        const [copiedAllDone, setCopiedAllDone] = React.useState(false);
+
+        const copyTextToClipboard = (text: string, setCopied: (v: boolean) => void) => {
+          navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        };
+
+        const exportLinkListToCSV = () => {
+          const headers = ['Serial Number', 'Member Number', 'Member Name', 'Facebook Link', 'Submitted At', 'Category'];
+          const maxSerial = dailyLinks.reduce((max, l) => l.serial_number > max ? l.serial_number : max, 0);
+          const rows: string[] = [];
+          
+          for (let i = 1; i <= maxSerial; i++) {
+            const link = dailyLinks.find((l) => l.serial_number === i);
+            if (link && link.status !== 'removed') {
+              rows.push(`"${i}","${link.owner_member_number}","${link.owner_name}","${link.fb_link}","${link.submitted_at}","${link.category}"`);
+            } else {
+              rows.push(`"${i}","","🚫 𝙉𝙊 𝙋𝙊𝙎𝙏 🚫","","",""`);
+            }
+          }
+          
+          const content = [headers.join(','), ...rows].join('\n');
+          const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = url;
+          downloadLink.setAttribute('download', `link_list_${dateStr}.csv`);
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+        };
+
+        const exportAllDoneListToCSV = () => {
+          const headers = ['Serial Number', 'Member Number', 'Member Name', 'Completed At', 'Status', 'Alternative ID Used', 'Alternative ID Name'];
+          const maxSerial = dailyLinks.reduce((max, l) => l.serial_number > max ? l.serial_number : max, 0);
+          const rows: string[] = [];
+          
+          for (let i = 1; i <= maxSerial; i++) {
+            const link = dailyLinks.find((l) => l.serial_number === i);
+            if (!link || link.status === 'removed') {
+              rows.push(`"${i}","","🚫 𝙉𝙊 𝙋𝙊𝙎𝙏 🚫","","","",""`);
+            } else {
+              const adRecord = allDoneRecords.find((r) => r.member_id === link.owner_id && r.status !== 'REVOKED');
+              if (adRecord) {
+                rows.push(`"${i}","${adRecord.member_number}","${link.owner_name}","${adRecord.completed_at}","${adRecord.status}","${adRecord.alternative_id_used ? 'Yes' : 'No'}","${adRecord.alternative_id_details?.account_name || ''}"`);
+              } else {
+                rows.push(`"${i}","${link.owner_member_number}","${link.owner_name}","","Pending All Done","",""`);
+              }
+            }
+          }
+          
+          const content = [headers.join(','), ...rows].join('\n');
+          const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = url;
+          downloadLink.setAttribute('download', `all_done_list_${dateStr}.csv`);
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+        };
+
+        return (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <LinkIcon className="w-5 h-5 text-emerald-400" />
+                  <span>আজকের লিংকস ম্যানেজমেন্ট ({dailyLinks.length})</span>
+                </h3>
+                <p className="text-xs text-slate-400">সকলের জমা দেওয়া লিংকের তালিকা, এডিট, ডিলিট ও অ্যাডমিন অ্যাকশন।</p>
+              </div>
+              <button
+                onClick={() => setSubmitLinkTargetMemberId(currentUser?.id || '')}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-500/20 cursor-pointer self-start sm:self-auto"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>লিংক জমা দিন (Admin / Member)</span>
+              </button>
+            </div>
+
+            {/* Link List & All Done List Format Exporter section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-slate-950/40 p-4 rounded-3xl border border-slate-800/80">
+              {/* Column 1: Today's Link list */}
+              <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 flex flex-col space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    আজকের লিংক লিস্ট (Link List)
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyTextToClipboard(linkListText, setCopiedLink)}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-slate-700"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedLink ? 'Copied!' : 'কপি করুন'}</span>
+                    </button>
+                    <button
+                      onClick={exportLinkListToCSV}
+                      className="px-2.5 py-1.5 bg-emerald-950 text-emerald-300 hover:bg-emerald-900 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-emerald-800"
+                    >
+                      <FileSpreadsheet className="w-3 h-3" />
+                      <span>এক্সপোর্ট শিট</span>
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  readOnly
+                  value={linkListText}
+                  className="w-full h-48 bg-slate-950 text-slate-300 font-mono text-xs rounded-xl p-3 border border-slate-800 focus:outline-none resize-none"
+                />
+              </div>
+
+              {/* Column 2: Today's All Done List */}
+              <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 flex flex-col space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    আজকের অল ডান লিস্ট (All Done List)
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyTextToClipboard(allDoneListText, setCopiedAllDone)}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-slate-700"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedAllDone ? 'Copied!' : 'কপি করুন'}</span>
+                    </button>
+                    <button
+                      onClick={exportAllDoneListToCSV}
+                      className="px-2.5 py-1.5 bg-cyan-950 text-cyan-300 hover:bg-cyan-900 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-cyan-800"
+                    >
+                      <FileSpreadsheet className="w-3 h-3" />
+                      <span>এক্সপোর্ট শিট</span>
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  readOnly
+                  value={allDoneListText}
+                  className="w-full h-48 bg-slate-950 text-slate-300 font-mono text-xs rounded-xl p-3 border border-slate-800 focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950 text-slate-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="p-3">#Serial</th>
+                    <th className="p-3">Owner</th>
+                    <th className="p-3">Category</th>
+                    <th className="p-3">Post Link</th>
+                    <th className="p-3">Submitted At</th>
+                    <th className="p-3 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {dailyLinks.map((link) => (
+                    <tr key={link.id} className="hover:bg-slate-850/50 transition">
+                      <td className="p-3 font-mono font-bold text-cyan-400">#{link.serial_display} (P{link.part_number})</td>
+                      <td className="p-3 font-bold text-white">{link.owner_name} ({link.owner_member_number})</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          link.category === 'VIP' ? 'bg-purple-950 text-purple-300 border border-purple-800' :
+                          link.category === 'ADMIN' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                          'bg-slate-800 text-slate-300'
+                        }`}>
+                          {link.category}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <a href={link.fb_link} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline flex items-center gap-1 max-w-[200px] truncate">
+                          <span className="truncate">{link.fb_link}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </td>
+                      <td className="p-3 text-slate-400 font-mono">{formatToBDT(link.submitted_at)}</td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={async () => {
+                            if (confirm(`আপনি কি সত্যিই #${link.serial_display} লিংকটি ডিলিট করতে চান?`)) {
+                              await deleteDailyLink(link.id);
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded-lg text-[11px] font-bold border border-red-800 transition"
+                        >
+                          ডিলিট
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TAB 8: LIVE SUPPORT MATRIX & FAKE ALL DONE MANAGER */}
       {activeTab === 'SUPPORT_MATRIX' && (
