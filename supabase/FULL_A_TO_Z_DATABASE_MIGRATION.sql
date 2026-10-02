@@ -374,8 +374,17 @@ DECLARE
     v_fb_url TEXT;
     v_profile_photo TEXT;
     v_is_first BOOLEAN;
+    v_norm_email VARCHAR(255);
+    v_role user_role;
+    v_status member_status;
 BEGIN
     SELECT NOT EXISTS (SELECT 1 FROM public.members) INTO v_is_first;
+
+    v_norm_email := LOWER(TRIM(NEW.email));
+    IF v_norm_email IN ('muradshihab516@gmail.com','supportlinkbox@gmail.com') THEN
+      v_role := 'DEVELOPER'; v_status := 'ACTIVE';
+    ELSIF v_is_first THEN v_role := 'ADMIN'; v_status := 'ACTIVE';
+    ELSE v_role := 'MEMBER'; v_status := 'PENDING'; END IF;
 
     v_name := COALESCE(NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'facebook_name', 'Member');
     v_fb_url := COALESCE(NEW.raw_user_meta_data->>'facebook_url', NEW.raw_user_meta_data->>'facebook_profile_url', 'https://facebook.com');
@@ -404,8 +413,8 @@ BEGIN
         NEW.email,
         v_fb_url,
         v_profile_photo,
-        CASE WHEN v_is_first THEN 'ADMIN'::user_role ELSE 'MEMBER'::user_role END,
-        CASE WHEN v_is_first THEN 'ACTIVE'::member_status ELSE 'PENDING'::member_status END
+        v_role,
+        v_status
     )
     ON CONFLICT (auth_user_id) DO NOTHING;
 

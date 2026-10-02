@@ -928,40 +928,9 @@ $$;
 -- SECTION 08 — TRIGGERS
 -- ====================================================================
 
--- Auth user auto-creation trigger
-CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    v_count INTEGER;
-    v_member_number VARCHAR(20);
-BEGIN
-    SELECT COUNT(*) + 101 INTO v_count FROM public.members;
-    v_member_number := 'SLB-' || v_count::TEXT;
-
-    INSERT INTO public.members (
-        auth_user_id, member_number, name, username, email, role, status
-    ) VALUES (
-        NEW.id,
-        v_member_number,
-        COALESCE(NEW.raw_user_meta_data->>'name', SPLIT_PART(NEW.email, '@', 1)),
-        SPLIT_PART(NEW.email, '@', 1) || '_' || FLOOR(RANDOM()*1000)::TEXT,
-        NEW.email,
-        'MEMBER',
-        'ACTIVE'
-    ) ON CONFLICT (auth_user_id) DO NOTHING;
-
-    RETURN NEW;
-END;
-$$;
-
+-- Auth user auto-creation trigger replaced by canonical handle_new_user
 DROP TRIGGER IF EXISTS trg_on_auth_user_created ON auth.users;
-CREATE TRIGGER trg_on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
+DROP FUNCTION IF EXISTS public.handle_new_auth_user();
 
 -- Protect developer role trigger
 CREATE OR REPLACE FUNCTION public.protect_developer_role_trigger()

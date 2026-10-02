@@ -104,3 +104,15 @@ $$;
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_fake_all_done_incidents_member ON public.fake_all_done_incidents(member_id);
 CREATE INDEX IF NOT EXISTS idx_fake_all_done_incidents_status ON public.fake_all_done_incidents(review_status);
+
+-- Overload matching admin frontend call signature
+CREATE OR REPLACE FUNCTION public.confirm_fake_all_done_secure(p_all_done_id UUID, p_admin_id UUID, p_admin_notes TEXT DEFAULT NULL)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v_incident_id UUID;
+BEGIN
+  SELECT id INTO v_incident_id FROM public.fake_all_done_incidents WHERE all_done_id = p_all_done_id ORDER BY created_at DESC LIMIT 1;
+  IF v_incident_id IS NULL THEN RETURN jsonb_build_object('success', false, 'message', 'INCIDENT_NOT_FOUND'); END IF;
+  RETURN public.confirm_fake_all_done_secure(v_incident_id, COALESCE(p_admin_notes, 'Confirmed fake all done by admin'));
+END; $$;
+GRANT EXECUTE ON FUNCTION public.confirm_fake_all_done_secure(UUID, UUID, TEXT) TO authenticated;
+
