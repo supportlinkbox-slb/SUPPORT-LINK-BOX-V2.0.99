@@ -582,6 +582,7 @@ DECLARE
     v_link public.daily_links%ROWTYPE;
     v_today DATE := (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka');
     v_record_id UUID;
+    v_pts_per_support INTEGER := 1;
 BEGIN
     IF v_auth_uid IS NULL THEN
         RAISE EXCEPTION 'UNAUTHORIZED: Authentication required.';
@@ -596,6 +597,14 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'LINK_NOT_FOUND: Target link not found.';
     END IF;
+
+    -- Lookup points_per_support from settings (default 1)
+    SELECT COALESCE(points_per_support, 1) INTO v_pts_per_support
+    FROM public.settings
+    WHERE community_id = v_supporter.community_id OR community_id = 'main'
+    ORDER BY (community_id = 'main') DESC
+    LIMIT 1;
+    IF v_pts_per_support IS NULL OR v_pts_per_support < 1 THEN v_pts_per_support := 1; END IF;
 
     -- Rule: Self support strictly disallowed
     IF v_link.owner_id = v_supporter.id THEN
@@ -628,7 +637,7 @@ BEGIN
         v_link.owner_id,
         v_today,
         NOW(),
-        1
+        v_pts_per_support
     ) RETURNING id INTO v_record_id;
 
     -- Update link total supports count
@@ -636,13 +645,13 @@ BEGIN
     SET total_supports_count = total_supports_count + 1
     WHERE id = p_link_id;
 
-    -- Award +1 point to supporter
+    -- Award points to supporter from settings
     INSERT INTO public.point_transactions (member_id, activity_type, points, date, reference_id, description)
-    VALUES (v_supporter.id, 'SUPPORT_COMPLETE', 1, v_today, p_link_id::text, 'Supported link #' || v_link.serial_display);
+    VALUES (v_supporter.id, 'SUPPORT_COMPLETE', v_pts_per_support, v_today, p_link_id::text, 'Supported link #' || v_link.serial_display);
 
     UPDATE public.members
-    SET points = points + 1,
-        weekly_points = weekly_points + 1,
+    SET points = points + v_pts_per_support,
+        weekly_points = weekly_points + v_pts_per_support,
         total_supports_given = total_supports_given + 1,
         last_active_at = NOW()
     WHERE id = v_supporter.id;
@@ -673,6 +682,11 @@ DECLARE
     v_rank INTEGER := NULL;
     v_base_points INTEGER := 5;
     v_bonus_points INTEGER := 0;
+    v_top1 INTEGER := 10;
+    v_top2 INTEGER := 8;
+    v_top3 INTEGER := 6;
+    v_top4 INTEGER := 4;
+    v_top5 INTEGER := 2;
     v_total_points INTEGER;
     v_all_done_id UUID;
     v_configured_start_str VARCHAR(10);
@@ -686,13 +700,19 @@ BEGIN
         RAISE EXCEPTION 'MEMBER_NOT_FOUND: Member profile not found.';
     END IF;
 
-    -- Lookup configured start time & base points from settings if available
+    -- Lookup configured start time & base points from settings if available (FIX #6)
     BEGIN
-        SELECT all_done_start_time, base_all_done_points
-        INTO v_configured_start_str, v_base_points
+        SELECT all_done_start_time,
+               COALESCE(points_all_done, 5),
+               COALESCE(points_fastest_top1, 10),
+               COALESCE(points_fastest_top2, 8),
+               COALESCE(points_fastest_top3, 6),
+               COALESCE(points_fastest_top4, 4),
+               COALESCE(points_fastest_top5, 2)
+        INTO v_configured_start_str, v_base_points, v_top1, v_top2, v_top3, v_top4, v_top5
         FROM public.settings
-        WHERE community_id = v_member.community_id OR id = 'default'
-        ORDER BY (id = 'default') ASC
+        WHERE community_id = v_member.community_id OR community_id = 'main'
+        ORDER BY (community_id = 'main') DESC
         LIMIT 1;
 
         IF v_configured_start_str IS NOT NULL AND v_configured_start_str <> '' THEN
@@ -703,7 +723,7 @@ BEGIN
         v_base_points := 5;
     END;
 
-    IF v_base_points IS NULL OR v_base_points < 5 THEN
+    IF v_base_points IS NULL OR v_base_points < 1 THEN
         v_base_points := 5;
     END IF;
 
@@ -741,15 +761,15 @@ BEGIN
     WHERE community_id = v_member.community_id AND date = v_today;
 
     IF v_existing_all_done_count = 0 THEN
-        v_rank := 1; v_bonus_points := 10;
+        v_rank := 1; v_bonus_points := v_top1;
     ELSIF v_existing_all_done_count = 1 THEN
-        v_rank := 2; v_bonus_points := 8;
+        v_rank := 2; v_bonus_points := v_top2;
     ELSIF v_existing_all_done_count = 2 THEN
-        v_rank := 3; v_bonus_points := 6;
+        v_rank := 3; v_bonus_points := v_top3;
     ELSIF v_existing_all_done_count = 3 THEN
-        v_rank := 4; v_bonus_points := 4;
+        v_rank := 4; v_bonus_points := v_top4;
     ELSIF v_existing_all_done_count = 4 THEN
-        v_rank := 5; v_bonus_points := 2;
+        v_rank := 5; v_bonus_points := v_top5;
     ELSE
         v_rank := NULL; v_bonus_points := 0;
     END IF;
@@ -928,7 +948,8 @@ $$;
 -- E. Protected Member Status Management (Developer Protected & Community Isolated)
 CREATE OR REPLACE FUNCTION public.set_member_status_secure(
     p_target_id UUID,
-    p_new_status member_status
+    p_new_status member_status,
+    p_reason TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -1002,7 +1023,7 @@ BEGIN
         'STATUS_CHANGED',
         'MEMBER',
         p_target_id::text,
-        'Status changed from ' || v_old_status || ' to ' || p_new_status || ' (Community: ' || v_target.community_id || ')'
+        'Status changed from ' || v_old_status || ' to ' || p_new_status || ' (Community: ' || v_target.community_id || ')' || CASE WHEN p_reason IS NOT NULL AND TRIM(p_reason) <> '' THEN '. Reason: ' || p_reason ELSE '' END
     );
 
     RETURN jsonb_build_object(
@@ -1017,7 +1038,8 @@ $$;
 -- Alias for backward-compatibility
 CREATE OR REPLACE FUNCTION public.rpc_update_member_status(
     p_target_id UUID,
-    p_new_status member_status
+    p_new_status member_status,
+    p_reason TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -1025,7 +1047,7 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-    RETURN public.set_member_status_secure(p_target_id, p_new_status);
+    RETURN public.set_member_status_secure(p_target_id, p_new_status, p_reason);
 END;
 $$;
 
@@ -1593,145 +1615,8 @@ END;
 $$;
 
 -- 8.4 RPC: create_scheduled_link_secure
--- Validates one-day-early rule (opens 12:00 PM BDT), derives owner, does NOT assign serial number yet
-CREATE OR REPLACE FUNCTION public.create_scheduled_link_secure(
-    p_target_date DATE,
-    p_post_type post_type,
-    p_caption TEXT,
-    p_instruction TEXT,
-    p_fb_link TEXT,
-    p_category link_category DEFAULT 'NORMAL',
-    p_target_member_id UUID DEFAULT NULL
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    v_auth_uid UUID := auth.uid();
-    v_actor public.members%ROWTYPE;
-    v_target_member public.members%ROWTYPE;
-    v_now_bdt TIMESTAMP := (NOW() AT TIME ZONE 'Asia/Dhaka');
-    v_today_bdt DATE := v_now_bdt::date;
-    v_tomorrow_bdt DATE := (v_today_bdt + INTERVAL '1 day')::date;
-    v_current_minutes INTEGER;
-    v_is_privileged BOOLEAN;
-    v_schedule_id UUID;
-BEGIN
-    IF v_auth_uid IS NULL THEN
-        RAISE EXCEPTION 'UNAUTHORIZED: Authentication required.';
-    END IF;
-
-    SELECT * INTO v_actor FROM public.members WHERE auth_user_id = v_auth_uid;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'MEMBER_NOT_FOUND: Actor profile not provisioned.';
-    END IF;
-
-    v_is_privileged := (v_actor.role = 'ADMIN' OR v_actor.role = 'DEVELOPER');
-
-    -- Resolve target member
-    IF p_target_member_id IS NOT NULL AND p_target_member_id <> v_actor.id THEN
-        IF NOT v_is_privileged THEN
-            RAISE EXCEPTION 'FORBIDDEN: Only Admins can schedule links on behalf of other members.';
-        END IF;
-        SELECT * INTO v_target_member FROM public.members WHERE id = p_target_member_id;
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'TARGET_NOT_FOUND: Target member profile not found.';
-        END IF;
-    ELSE
-        v_target_member := v_actor;
-    END IF;
-
-    IF v_target_member.status <> 'ACTIVE' THEN
-        RAISE EXCEPTION 'MEMBER_INACTIVE: Target account is %.', v_target_member.status;
-    END IF;
-
-    -- Business Rule: Target date must be future date
-    IF p_target_date <= v_today_bdt THEN
-        RAISE EXCEPTION 'INVALID_TARGET_DATE: Scheduled link target date must be in the future.';
-    END IF;
-
-    -- One-Day-Early Rule: Scheduling for tomorrow opens at 12:00 PM BDT today
-    IF p_target_date = v_tomorrow_bdt AND NOT v_is_privileged THEN
-        v_current_minutes := EXTRACT(HOUR FROM v_now_bdt) * 60 + EXTRACT(MINUTE FROM v_now_bdt);
-        IF v_current_minutes < (12 * 60) THEN
-            RAISE EXCEPTION 'SCHEDULE_WINDOW_NOT_OPEN: Scheduling for tomorrow opens at 12:00 PM BDT today.';
-        END IF;
-    END IF;
-
-    -- Check duplicate pending schedule
-    IF EXISTS (
-        SELECT 1 FROM public.scheduled_links
-        WHERE community_id = v_target_member.community_id
-          AND owner_id = v_target_member.id
-          AND target_date = p_target_date
-          AND status = 'pending'
-    ) THEN
-        RAISE EXCEPTION 'DUPLICATE_SCHEDULE: A pending scheduled link already exists for this date.';
-    END IF;
-
-    -- Validate Facebook URL
-    IF p_fb_link IS NULL OR (
-        p_fb_link NOT LIKE 'https://%facebook.com/%' AND
-        p_fb_link NOT LIKE 'https://%fb.watch/%' AND
-        p_fb_link NOT LIKE 'https://%fb.me/%' AND
-        p_fb_link NOT LIKE 'https://%m.facebook.com/%'
-    ) THEN
-        RAISE EXCEPTION 'INVALID_URL: Must be an authorized Facebook post link.';
-    END IF;
-
-    INSERT INTO public.scheduled_links (
-        community_id,
-        owner_id,
-        target_date,
-        target_time,
-        post_type,
-        category,
-        caption,
-        instruction,
-        fb_link,
-        status,
-        scheduled_by_admin_id,
-        created_at,
-        updated_at
-    ) VALUES (
-        v_target_member.community_id,
-        v_target_member.id,
-        p_target_date,
-        '10:00',
-        p_post_type,
-        CASE WHEN v_is_privileged THEN p_category ELSE 'NORMAL' END,
-        TRIM(COALESCE(p_caption, '')),
-        TRIM(COALESCE(p_instruction, 'Like and Comment')),
-        TRIM(p_fb_link),
-        'pending',
-        CASE WHEN v_actor.id <> v_target_member.id THEN v_actor.id ELSE NULL END,
-        NOW(),
-        NOW()
-    ) RETURNING id INTO v_schedule_id;
-
-    -- Audit history
-    INSERT INTO public.audit_logs (actor_id, actor_auth_id, actor_name, actor_role, action, target_type, target_id, details)
-    VALUES (
-        v_actor.id, 
-        v_auth_uid, 
-        v_actor.name, 
-        v_actor.role, 
-        'SCHEDULE_CREATED', 
-        'SCHEDULED_LINK', 
-        v_schedule_id::text, 
-        'Scheduled link for ' || p_target_date::text || ' (Owner: ' || v_target_member.name || ')'
-    );
-
-    RETURN jsonb_build_object(
-        'success', true,
-        'schedule_id', v_schedule_id,
-        'target_date', p_target_date,
-        'status', 'pending'
-    );
-END;
-$$;
+-- NOTE (FIX #4): The canonical 8-param version (with p_target_time and 12:00-16:00 BDT validation) is defined in FULL_A_TO_Z_DATABASE_MIGRATION.sql.
+-- Obsolete 7-param definition removed to prevent signature overwrites.
 
 -- 8.5 RPC: edit_scheduled_link_secure
 CREATE OR REPLACE FUNCTION public.edit_scheduled_link_secure(

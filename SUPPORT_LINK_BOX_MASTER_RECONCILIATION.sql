@@ -197,6 +197,8 @@ CREATE TABLE IF NOT EXISTS public.invite_tokens (
     created_by UUID REFERENCES public.members(id),
     target_role user_role NOT NULL DEFAULT 'MEMBER',
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    is_revoked BOOLEAN NOT NULL DEFAULT false,
+    revoked_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
     used_at TIMESTAMPTZ,
     used_by UUID REFERENCES public.members(id),
@@ -204,6 +206,8 @@ CREATE TABLE IF NOT EXISTS public.invite_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE public.invite_tokens ADD COLUMN IF NOT EXISTS is_revoked BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.invite_tokens ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 
 -- Reports
 CREATE TABLE IF NOT EXISTS public.reports (
@@ -303,14 +307,16 @@ BEGIN
 
     -- Direct client write over REST/GraphQL API
     IF v_role_setting IN ('authenticated', 'anon') THEN
-        -- CRITICAL RULE: NO ONE (neither Member nor Admin) can directly alter points/ledger columns on the table!
-        -- All point alterations must be logged to the immutable ledger via secure RPCs.
+        -- CRITICAL RULE: NO ONE (neither Member nor Admin) can directly alter points/ledger/stats columns on the table!
+        -- All point and stat alterations must be logged to the immutable ledger via secure RPCs.
         IF NEW.points IS DISTINCT FROM OLD.points OR
            NEW.weekly_points IS DISTINCT FROM OLD.weekly_points OR
            NEW.monthly_points IS DISTINCT FROM OLD.monthly_points OR
            NEW.daily_points IS DISTINCT FROM OLD.daily_points OR
-           NEW.total_links_submitted IS DISTINCT FROM OLD.total_links_submitted THEN
-            RAISE EXCEPTION 'PERMISSION_DENIED: Direct modification of points is forbidden. All point adjustments must go through ledger RPCs.';
+           NEW.total_links_submitted IS DISTINCT FROM OLD.total_links_submitted OR
+           NEW.total_supports_given IS DISTINCT FROM OLD.total_supports_given OR
+           NEW.total_all_done IS DISTINCT FROM OLD.total_all_done THEN
+            RAISE EXCEPTION 'PERMISSION_DENIED: Direct modification of points and stats is forbidden. All point adjustments must go through ledger RPCs.';
         END IF;
 
         -- Check caller's role from members table
@@ -479,10 +485,10 @@ BEGIN
 END;
 $$;
 
--- Schedule Permission Toggle RPC
+-- Schedule Permission Toggle RPC (FIX #2: Canonical signature matching frontend caller)
 CREATE OR REPLACE FUNCTION public.set_member_schedule_permission_secure(
-    p_member_id UUID,
-    p_can_schedule BOOLEAN
+    p_target_member_id UUID,
+    p_allowed BOOLEAN
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -498,12 +504,65 @@ BEGIN
     END IF;
 
     UPDATE public.members
-    SET can_schedule_links = p_can_schedule, updated_at = NOW()
-    WHERE id = p_member_id;
+    SET can_schedule_links = p_allowed, updated_at = NOW()
+    WHERE id = p_target_member_id;
 
     RETURN jsonb_build_object('success', true);
 END;
 $$;
+GRANT EXECUTE ON FUNCTION public.set_member_schedule_permission_secure(UUID, BOOLEAN) TO authenticated;
+
+-- Member Status Management RPC (FIX #3: Includes optional p_reason logged to audit_logs)
+CREATE OR REPLACE FUNCTION public.set_member_status_secure(
+    p_target_id UUID,
+    p_new_status member_status,
+    p_reason TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_caller public.members%ROWTYPE;
+    v_target public.members%ROWTYPE;
+    v_old_status member_status;
+BEGIN
+    SELECT * INTO v_caller FROM public.members WHERE auth_user_id = auth.uid();
+    IF v_caller.id IS NULL OR v_caller.role NOT IN ('ADMIN', 'DEVELOPER') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'UNAUTHORIZED: Admin privilege required.');
+    END IF;
+
+    SELECT * INTO v_target FROM public.members WHERE id = p_target_id;
+    IF v_target.id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'MEMBER_NOT_FOUND');
+    END IF;
+
+    IF v_target.role = 'DEVELOPER' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'DEVELOPER_PROTECTED: Developer accounts cannot be modified.');
+    END IF;
+
+    v_old_status := v_target.status;
+
+    UPDATE public.members
+    SET status = p_new_status, updated_at = NOW()
+    WHERE id = p_target_id;
+
+    INSERT INTO public.audit_logs (actor_id, actor_name, actor_role, action, target_type, target_id, details)
+    VALUES (
+        v_caller.id,
+        v_caller.name,
+        v_caller.role::text,
+        'STATUS_CHANGED',
+        'MEMBER',
+        p_target_id::text,
+        'Status changed from ' || v_old_status::text || ' to ' || p_new_status::text || CASE WHEN p_reason IS NOT NULL AND TRIM(p_reason) <> '' THEN '. Reason: ' || p_reason ELSE '' END
+    );
+
+    RETURN jsonb_build_object('success', true, 'status', p_new_status);
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.set_member_status_secure(UUID, member_status, TEXT) TO authenticated;
 
 -- Member Email Resolution for Login Fallback
 CREATE OR REPLACE FUNCTION public.resolve_member_email_by_number(p_member_number VARCHAR)
@@ -771,8 +830,8 @@ BEGIN
 END;
 $$;
 
--- Invite Token RPCs
-CREATE OR REPLACE FUNCTION public.consume_invite_token_tx(p_token_hash VARCHAR)
+-- Invite Token RPCs (FIX #5: Canonical consolidated definitions with is_revoked check)
+CREATE OR REPLACE FUNCTION public.consume_invite_token_tx(p_token_hash TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -785,7 +844,7 @@ BEGIN
     SELECT * INTO v_caller FROM public.members WHERE auth_user_id = auth.uid();
     
     SELECT * INTO v_token FROM public.invite_tokens 
-    WHERE token_hash = p_token_hash AND status = 'ACTIVE' AND expires_at > NOW();
+    WHERE token_hash = p_token_hash AND status = 'ACTIVE' AND is_revoked = false AND expires_at > NOW();
 
     IF v_token.id IS NULL THEN
         RETURN jsonb_build_object('success', false, 'reason', 'INVALID_OR_EXPIRED_TOKEN');
@@ -798,8 +857,9 @@ BEGIN
     RETURN jsonb_build_object('success', true);
 END;
 $$;
+GRANT EXECUTE ON FUNCTION public.consume_invite_token_tx(TEXT) TO authenticated;
 
-CREATE OR REPLACE FUNCTION public.verify_invite_token(p_token_hash VARCHAR)
+CREATE OR REPLACE FUNCTION public.verify_invite_token(p_token_hash TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -809,15 +869,40 @@ DECLARE
     v_token public.invite_tokens%ROWTYPE;
 BEGIN
     SELECT * INTO v_token FROM public.invite_tokens 
-    WHERE token_hash = p_token_hash AND status = 'ACTIVE' AND expires_at > NOW();
+    WHERE token_hash = p_token_hash AND status = 'ACTIVE' AND is_revoked = false AND expires_at > NOW();
 
     IF v_token.id IS NULL THEN
-        RETURN jsonb_build_object('valid', false, 'error', 'Token is invalid or expired.');
+        RETURN jsonb_build_object('valid', false, 'error', 'Token is invalid, expired, or revoked.');
     END IF;
 
     RETURN jsonb_build_object('valid', true, 'target_role', v_token.target_role);
 END;
 $$;
+GRANT EXECUTE ON FUNCTION public.verify_invite_token(TEXT) TO anon, authenticated;
+
+-- Admin Revoke Invite Token RPC (Sets is_revoked = true and revoked_at = NOW())
+CREATE OR REPLACE FUNCTION public.revoke_invite_token_secure(p_token_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_caller public.members%ROWTYPE;
+BEGIN
+    SELECT * INTO v_caller FROM public.members WHERE auth_user_id = auth.uid();
+    IF v_caller.id IS NULL OR v_caller.role NOT IN ('ADMIN', 'DEVELOPER') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'UNAUTHORIZED: Admin privilege required.');
+    END IF;
+
+    UPDATE public.invite_tokens
+    SET status = 'REVOKED', is_revoked = true, revoked_at = NOW(), updated_at = NOW()
+    WHERE id = p_token_id;
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.revoke_invite_token_secure(UUID) TO authenticated;
 
 -- 7. RLS POLICIES
 ALTER TABLE public.communities ENABLE ROW LEVEL SECURITY;
@@ -1010,7 +1095,68 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.admin_adjust_points_secure(UUID, INTEGER, TEXT) TO authenticated;
 
--- 9. PG_CRON AUTOMATED BACKGROUND RUNNER
+-- 9. AD RECOVERY COMPLETION RPC (FIX #7: Unlocks suspended/inactive accounts after monetization ad watch)
+CREATE OR REPLACE FUNCTION public.rpc_complete_ad_recovery(p_member_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_caller public.members%ROWTYPE;
+    v_target public.members%ROWTYPE;
+    v_today_bdt DATE := (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::DATE;
+BEGIN
+    SELECT * INTO v_caller FROM public.members WHERE auth_user_id = auth.uid();
+    IF v_caller.id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'UNAUTHORIZED: Please sign in.');
+    END IF;
+
+    -- Verify caller is admin/developer or target themselves
+    IF v_caller.id <> p_member_id AND v_caller.role NOT IN ('ADMIN', 'DEVELOPER') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'FORBIDDEN: You can only recover your own account.');
+    END IF;
+
+    SELECT * INTO v_target FROM public.members WHERE id = p_member_id;
+    IF v_target.id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'MEMBER_NOT_FOUND');
+    END IF;
+
+    -- Update member to ACTIVE and reset inactive days
+    UPDATE public.members
+    SET status = 'ACTIVE',
+        days_inactive = 0,
+        last_active_date = v_today_bdt,
+        updated_at = NOW()
+    WHERE id = p_member_id;
+
+    -- Ledger record (0 points for audit trail)
+    INSERT INTO public.point_transactions (
+        member_id,
+        activity_type,
+        points,
+        date,
+        reference_id,
+        description
+    ) VALUES (
+        p_member_id,
+        'AD_RECOVERY',
+        0,
+        v_today_bdt,
+        p_member_id::text,
+        'Member status restored to ACTIVE via Ad Monetization Recovery'
+    );
+
+    -- Audit log
+    INSERT INTO public.audit_logs (actor_id, actor_name, actor_role, action, target_type, target_id, details)
+    VALUES (v_caller.id, v_caller.name, v_caller.role::text, 'AD_RECOVERY_COMPLETED', 'MEMBER', p_member_id::text, 'Ad recovery completed for ' || v_target.name);
+
+    RETURN jsonb_build_object('success', true, 'status', 'ACTIVE');
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.rpc_complete_ad_recovery(UUID) TO authenticated;
+
+-- 10. PG_CRON AUTOMATED BACKGROUND RUNNER (FIX #1: Uses $cron$ tag to avoid syntax error in nested DO block)
 -- Automatically invokes run_due_scheduled_links_secure() every 2 minutes.
 -- The runner internally verifies 12:00 PM - 04:00 PM BDT execution window and target_time.
 DO $$
@@ -1036,7 +1182,7 @@ BEGIN
     PERFORM cron.schedule(
         'slb-run-due-scheduled-links',
         '*/2 * * * *',
-        $$SELECT public.run_due_scheduled_links_secure()$$
+        $cron$SELECT public.run_due_scheduled_links_secure()$cron$
     );
 EXCEPTION WHEN OTHERS THEN
     NULL;

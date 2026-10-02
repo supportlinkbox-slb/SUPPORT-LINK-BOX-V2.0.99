@@ -584,10 +584,14 @@ DECLARE
     v_auth_uid UUID := auth.uid();
     v_member public.members%ROWTYPE;
     v_today DATE := (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka');
+    v_now_time TIME := (NOW() AT TIME ZONE 'Asia/Dhaka')::time;
     v_next_serial INTEGER;
     v_serial_display VARCHAR(10);
     v_link_id UUID;
     v_existing_count INTEGER;
+    v_start_str VARCHAR(10);
+    v_end_str VARCHAR(10);
+    v_pts_earned INTEGER := 5;
 BEGIN
     IF v_auth_uid IS NULL THEN
         RAISE EXCEPTION 'UNAUTHORIZED: Login required.';
@@ -598,6 +602,23 @@ BEGIN
         RAISE EXCEPTION 'UNAUTHORIZED: Active member account required.';
     END IF;
 
+    -- Lookup configured submission window & points from settings (FIX #6 & FIX #10.1)
+    SELECT submission_start_time, submission_end_time, COALESCE(points_daily_link_submit, 5)
+    INTO v_start_str, v_end_str, v_pts_earned
+    FROM public.settings
+    WHERE community_id = v_member.community_id OR community_id = 'main'
+    ORDER BY (community_id = 'main') DESC
+    LIMIT 1;
+
+    IF v_pts_earned IS NULL OR v_pts_earned < 1 THEN v_pts_earned := 5; END IF;
+
+    -- Submission window validation (10:00 - 16:50 BDT) unless Admin/Developer
+    IF v_now_time < COALESCE(v_start_str, '10:00')::time OR v_now_time > COALESCE(v_end_str, '16:50')::time THEN
+        IF v_member.role NOT IN ('ADMIN', 'DEVELOPER') THEN
+            RAISE EXCEPTION 'WINDOW_CLOSED: Daily link submission is only allowed between % and % BDT.', COALESCE(v_start_str, '10:00'), COALESCE(v_end_str, '16:50');
+        END IF;
+    END IF;
+
     -- Check limit (1 link per member per day)
     SELECT COUNT(*) INTO v_existing_count FROM public.daily_links
     WHERE owner_id = v_member.id AND date = v_today;
@@ -606,7 +627,9 @@ BEGIN
         RAISE EXCEPTION 'LIMIT_EXCEEDED: You have already submitted a link today.';
     END IF;
 
-    -- Atomic serial generation
+    -- Advisory lock for concurrency-safe serial assignment (FIX #10.1)
+    PERFORM pg_advisory_xact_lock(hashtext('slb_daily_link_' || v_member.community_id || '_' || v_today::text));
+
     SELECT COALESCE(MAX(serial_number), 0) + 1 INTO v_next_serial
     FROM public.daily_links
     WHERE community_id = v_member.community_id AND date = v_today;
@@ -623,11 +646,16 @@ BEGIN
         p_post_type, p_category, p_caption, p_instruction, p_fb_link
     ) RETURNING id INTO v_link_id;
 
-    -- Award submission points (+5)
-    UPDATE public.members SET points = points + 5, total_links_submitted = total_links_submitted + 1 WHERE id = v_member.id;
+    -- Award submission points from settings (FIX #6)
+    UPDATE public.members 
+    SET points = points + v_pts_earned, 
+        weekly_points = weekly_points + v_pts_earned,
+        total_links_submitted = total_links_submitted + 1,
+        last_active_at = NOW() 
+    WHERE id = v_member.id;
 
     INSERT INTO public.point_transactions (member_id, activity_type, points, date, reference_id, description)
-    VALUES (v_member.id, 'DAILY_LINK_SUBMIT', 5, v_today, v_link_id::TEXT, 'Daily Link Submission (+5)');
+    VALUES (v_member.id, 'DAILY_LINK_SUBMIT', v_pts_earned, v_today, v_link_id::TEXT, 'Daily Link Submission (+' || v_pts_earned || ')');
 
     RETURN jsonb_build_object('success', true, 'link_id', v_link_id, 'serial_display', v_serial_display);
 END;
@@ -651,7 +679,7 @@ BEGIN
 END;
 $$;
 
--- 3. Record Support Atomic
+-- 3. Record Support Atomic (FIX #6: Dynamic points_per_support from settings)
 CREATE OR REPLACE FUNCTION public.record_support_atomic(
     p_link_id UUID
 )
@@ -666,6 +694,7 @@ DECLARE
     v_link public.daily_links%ROWTYPE;
     v_today DATE := (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka');
     v_support_id UUID;
+    v_pts_support INTEGER := 1;
 BEGIN
     IF v_auth_uid IS NULL THEN
         RAISE EXCEPTION 'UNAUTHORIZED: Login required.';
@@ -681,6 +710,15 @@ BEGIN
         RAISE EXCEPTION 'NOT_FOUND: Daily link not found.';
     END IF;
 
+    -- Lookup points_per_support from settings (FIX #6)
+    SELECT COALESCE(points_per_support, 1) INTO v_pts_support
+    FROM public.settings
+    WHERE community_id = v_supporter.community_id OR community_id = 'main'
+    ORDER BY (community_id = 'main') DESC
+    LIMIT 1;
+
+    IF v_pts_support IS NULL OR v_pts_support < 1 THEN v_pts_support := 1; END IF;
+
     -- Check duplicate support
     IF EXISTS (
         SELECT 1 FROM public.support_records
@@ -692,15 +730,20 @@ BEGIN
     INSERT INTO public.support_records (
         community_id, link_id, supporter_id, supporter_member_number, link_owner_id, date, points_awarded
     ) VALUES (
-        v_link.community_id, v_link.id, v_supporter.id, v_supporter.member_number, v_link.owner_id, v_today, 1
+        v_link.community_id, v_link.id, v_supporter.id, v_supporter.member_number, v_link.owner_id, v_today, v_pts_support
     ) RETURNING id INTO v_support_id;
 
-    -- Update counters & points
+    -- Update counters & points from settings
     UPDATE public.daily_links SET total_supports_count = total_supports_count + 1 WHERE id = p_link_id;
-    UPDATE public.members SET points = points + 1, total_supports_given = total_supports_given + 1 WHERE id = v_supporter.id;
+    UPDATE public.members 
+    SET points = points + v_pts_support, 
+        weekly_points = weekly_points + v_pts_support,
+        total_supports_given = total_supports_given + 1,
+        last_active_at = NOW() 
+    WHERE id = v_supporter.id;
 
     INSERT INTO public.point_transactions (member_id, activity_type, points, date, reference_id, description)
-    VALUES (v_supporter.id, 'LINK_SUPPORT', 1, v_today, v_support_id::TEXT, 'Supported link ' || v_link.serial_display);
+    VALUES (v_supporter.id, 'LINK_SUPPORT', v_pts_support, v_today, v_support_id::TEXT, 'Supported link ' || v_link.serial_display || ' (+' || v_pts_support || ')');
 
     RETURN jsonb_build_object('success', true, 'support_id', v_support_id);
 END;
@@ -718,7 +761,7 @@ BEGIN
 END;
 $$;
 
--- 4. Submit All Done Atomic
+-- 4. Submit All Done Atomic (FIX #6: Dynamic points_all_done & bonuses from settings)
 CREATE OR REPLACE FUNCTION public.rpc_submit_all_done()
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -729,9 +772,16 @@ DECLARE
     v_auth_uid UUID := auth.uid();
     v_member public.members%ROWTYPE;
     v_today DATE := (CURRENT_DATE AT TIME ZONE 'Asia/Dhaka');
+    v_now_time TIME := (NOW() AT TIME ZONE 'Asia/Dhaka')::time;
+    v_start_str VARCHAR(10);
     v_rank INTEGER;
     v_bonus INTEGER := 0;
     v_base INTEGER := 5;
+    v_top1 INTEGER := 10;
+    v_top2 INTEGER := 8;
+    v_top3 INTEGER := 6;
+    v_top4 INTEGER := 4;
+    v_top5 INTEGER := 2;
     v_total INTEGER;
     v_all_done_id UUID;
 BEGIN
@@ -744,18 +794,42 @@ BEGIN
         RAISE EXCEPTION 'UNAUTHORIZED: Active account required.';
     END IF;
 
+    -- Lookup configured all done parameters from settings (FIX #6)
+    SELECT all_done_start_time,
+           COALESCE(points_all_done, 5),
+           COALESCE(points_fastest_top1, 10),
+           COALESCE(points_fastest_top2, 8),
+           COALESCE(points_fastest_top3, 6),
+           COALESCE(points_fastest_top4, 4),
+           COALESCE(points_fastest_top5, 2)
+    INTO v_start_str, v_base, v_top1, v_top2, v_top3, v_top4, v_top5
+    FROM public.settings
+    WHERE community_id = v_member.community_id OR community_id = 'main'
+    ORDER BY (community_id = 'main') DESC
+    LIMIT 1;
+
+    IF v_base IS NULL OR v_base < 1 THEN v_base := 5; END IF;
+
+    -- Validate window (Default 17:00 BDT)
+    IF v_now_time < COALESCE(v_start_str, '17:00')::time THEN
+        RAISE EXCEPTION 'ALL_DONE_NOT_OPEN: All Done submission window opens at % BDT.', COALESCE(v_start_str, '17:00');
+    END IF;
+
     IF EXISTS (SELECT 1 FROM public.all_done WHERE member_id = v_member.id AND date = v_today) THEN
         RAISE EXCEPTION 'DUPLICATE: All Done already submitted today.';
     END IF;
 
-    -- Determine fastest rank
+    -- Concurrency-safe rank determination
+    PERFORM pg_advisory_xact_lock(hashtext('slb_alldone_rank_' || v_member.community_id || '_' || v_today::text));
+
     SELECT COUNT(*) + 1 INTO v_rank FROM public.all_done WHERE date = v_today AND community_id = v_member.community_id;
 
-    IF v_rank = 1 THEN v_bonus := 10;
-    ELSIF v_rank = 2 THEN v_bonus := 8;
-    ELSIF v_rank = 3 THEN v_bonus := 6;
-    ELSIF v_rank = 4 THEN v_bonus := 4;
-    ELSIF v_rank = 5 THEN v_bonus := 2;
+    IF v_rank = 1 THEN v_bonus := v_top1;
+    ELSIF v_rank = 2 THEN v_bonus := v_top2;
+    ELSIF v_rank = 3 THEN v_bonus := v_top3;
+    ELSIF v_rank = 4 THEN v_bonus := v_top4;
+    ELSIF v_rank = 5 THEN v_bonus := v_top5;
+    ELSE v_bonus := 0;
     END IF;
 
     v_total := v_base + v_bonus;
