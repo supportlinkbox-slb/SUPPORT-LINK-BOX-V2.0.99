@@ -1242,17 +1242,18 @@ export const configApi = {
       if (!isSupabaseConfigured) return { success: true, data: null };
       const { data, error } = await supabase
         .from('settings')
-        .select('raw_value')
-        .eq('key', 'active_festival_theme')
+        .select('active_festival_theme')
+        .eq('community_id', 'main')
         .maybeSingle();
 
       if (error) {
         // Table or key might not exist yet; gracefully fallback
         return { success: true, data: null };
       }
-      if (data?.raw_value) {
+      if (data?.active_festival_theme) {
         try {
-          const parsed = typeof data.raw_value === 'string' ? JSON.parse(data.raw_value) : data.raw_value;
+          const val = data.active_festival_theme;
+          const parsed = typeof val === 'string' ? JSON.parse(val) : val;
           return { success: true, data: parsed as ActiveThemeState };
         } catch {
           return { success: true, data: null };
@@ -1273,11 +1274,11 @@ export const configApi = {
         .from('settings')
         .upsert(
           {
-            key: 'active_festival_theme',
-            raw_value: JSON.stringify(themeState),
+            community_id: 'main',
+            active_festival_theme: themeState,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'key' }
+          { onConflict: 'community_id' }
         );
 
       if (upsertErr) {

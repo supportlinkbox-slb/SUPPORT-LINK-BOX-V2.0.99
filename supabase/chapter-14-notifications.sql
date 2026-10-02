@@ -79,14 +79,15 @@ $$;
 -- RPC 2: Generate Notice Secure (Single Member)
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.generate_notice_secure(
-    p_member_id UUID,
-    p_type VARCHAR(50),
-    p_title VARCHAR(200),
-    p_content TEXT,
+    p_member_id UUID DEFAULT NULL,
+    p_type VARCHAR(50) DEFAULT 'SIMPLE_WARNING',
+    p_title VARCHAR(200) DEFAULT '',
+    p_content TEXT DEFAULT '',
     p_level VARCHAR(20) DEFAULT 'SIMPLE_WARNING',
     p_days_inactive_filter INTEGER DEFAULT NULL,
     p_is_pinned BOOLEAN DEFAULT false,
-    p_priority VARCHAR(20) DEFAULT 'NORMAL'
+    p_priority VARCHAR(20) DEFAULT 'NORMAL',
+    p_target_member_id UUID DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -101,7 +102,13 @@ DECLARE
     v_exact_inactive_days INTEGER := 0;
     v_notice_id UUID;
     v_rendered_content TEXT;
+    v_target_id UUID;
 BEGIN
+    v_target_id := COALESCE(p_member_id, p_target_member_id);
+    IF v_target_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'MEMBER_ID_REQUIRED: Target member ID must be provided.');
+    END IF;
+
     v_caller_id := auth.uid();
     
     -- Verify caller is Admin or Developer
@@ -113,7 +120,7 @@ BEGIN
     END IF;
 
     -- Fetch target member
-    SELECT * INTO v_target_member FROM public.members WHERE id = p_member_id;
+    SELECT * INTO v_target_member FROM public.members WHERE id = v_target_id;
     IF NOT FOUND THEN
         RETURN jsonb_build_object('success', false, 'error', 'MEMBER_NOT_FOUND: Member does not exist.');
     END IF;
@@ -131,7 +138,7 @@ BEGIN
     END IF;
 
     -- Calculate server-authoritative exact inactive days
-    v_exact_inactive_days := public.calculate_member_inactive_days_secure(p_member_id);
+    v_exact_inactive_days := public.calculate_member_inactive_days_secure(v_target_id);
 
     -- Template replacements
     v_rendered_content := p_content;
@@ -161,13 +168,13 @@ BEGIN
         created_at
     ) VALUES (
         v_target_member.community_id,
-        p_member_id,
+        v_target_id,
         p_type,
         p_title,
         v_rendered_content,
         p_level,
         'MEMBER',
-        ARRAY[p_member_id],
+        ARRAY[v_target_id],
         p_days_inactive_filter,
         v_exact_inactive_days,
         p_is_pinned,
@@ -190,7 +197,7 @@ BEGIN
         priority,
         created_at
     ) VALUES (
-        p_member_id,
+        v_target_id,
         v_target_member.community_id,
         p_title,
         v_rendered_content,
@@ -225,7 +232,7 @@ BEGIN
         'NOTICE_GENERATED',
         'NOTICE',
         v_notice_id::TEXT,
-        p_member_id,
+        v_target_id,
         format('Generated %s for %s (%s). Inactive days: %s', p_type, v_target_member.name, v_target_member.member_number, v_exact_inactive_days)
     );
 
@@ -242,13 +249,14 @@ $$;
 -- RPC 3: Bulk Generate Notices Secure (Multiple Members)
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.bulk_generate_notices_secure(
-    p_member_ids UUID[],
-    p_type VARCHAR(50),
-    p_title VARCHAR(200),
-    p_content_template TEXT,
+    p_member_ids UUID[] DEFAULT NULL,
+    p_type VARCHAR(50) DEFAULT 'SIMPLE_WARNING',
+    p_title VARCHAR(200) DEFAULT '',
+    p_content_template TEXT DEFAULT '',
     p_level VARCHAR(20) DEFAULT 'SIMPLE_WARNING',
     p_days_inactive_filter INTEGER DEFAULT NULL,
-    p_priority VARCHAR(20) DEFAULT 'NORMAL'
+    p_priority VARCHAR(20) DEFAULT 'NORMAL',
+    p_target_member_ids UUID[] DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -266,7 +274,13 @@ DECLARE
     v_rendered_content TEXT;
     v_success_count INTEGER := 0;
     v_skipped_count INTEGER := 0;
+    v_target_ids UUID[];
 BEGIN
+    v_target_ids := COALESCE(p_member_ids, p_target_member_ids);
+    IF v_target_ids IS NULL OR array_length(v_target_ids, 1) IS NULL OR array_length(v_target_ids, 1) = 0 THEN
+        RETURN jsonb_build_object('success', false, 'error', 'MEMBER_IDS_REQUIRED: Target member IDs array must be provided.');
+    END IF;
+
     v_caller_id := auth.uid();
     
     SELECT role, name INTO v_caller_role, v_caller_name 
@@ -276,7 +290,7 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'UNAUTHORIZED: Only Admins can bulk generate notices.');
     END IF;
 
-    FOREACH v_mem_id IN ARRAY p_member_ids
+    FOREACH v_mem_id IN ARRAY v_target_ids
     LOOP
         SELECT * INTO v_target_member FROM public.members WHERE id = v_mem_id;
         IF FOUND THEN
