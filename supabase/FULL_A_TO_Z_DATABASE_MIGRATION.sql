@@ -375,6 +375,7 @@ DECLARE
     v_profile_photo TEXT;
     v_is_first BOOLEAN;
     v_norm_email VARCHAR(255);
+    v_existing_id UUID;
     v_role user_role;
     v_status member_status;
 BEGIN
@@ -395,28 +396,46 @@ BEGIN
         v_member_number := public.generate_member_number_secure();
     END IF;
 
-    INSERT INTO public.members (
-        auth_user_id,
-        community_id,
-        member_number,
-        name,
-        email,
-        facebook_url,
-        profile_photo_url,
-        role,
-        status
-    ) VALUES (
-        NEW.id,
-        'main',
-        v_member_number,
-        v_name,
-        NEW.email,
-        v_fb_url,
-        v_profile_photo,
-        v_role,
-        v_status
-    )
-    ON CONFLICT (auth_user_id) DO NOTHING;
+    -- Check for pre-provisioned row (same email, no auth linked yet)
+    SELECT id INTO v_existing_id
+    FROM public.members
+    WHERE LOWER(email) = v_norm_email
+    LIMIT 1;
+
+    IF v_existing_id IS NOT NULL THEN
+        -- Link the pre-provisioned row to this auth user
+        UPDATE public.members
+        SET auth_user_id = NEW.id,
+            role = v_role,
+            status = v_status,
+            name = COALESCE(NULLIF(v_name, 'Member'), name),
+            facebook_url = CASE WHEN v_fb_url <> 'https://facebook.com' THEN v_fb_url ELSE facebook_url END,
+            profile_photo_url = COALESCE(v_profile_photo, profile_photo_url)
+        WHERE id = v_existing_id;
+    ELSE
+        INSERT INTO public.members (
+            auth_user_id,
+            community_id,
+            member_number,
+            name,
+            email,
+            facebook_url,
+            profile_photo_url,
+            role,
+            status
+        ) VALUES (
+            NEW.id,
+            'main',
+            v_member_number,
+            v_name,
+            NEW.email,
+            v_fb_url,
+            v_profile_photo,
+            v_role,
+            v_status
+        )
+        ON CONFLICT (auth_user_id) DO NOTHING;
+    END IF;
 
     RETURN NEW;
 END;
