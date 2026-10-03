@@ -41,7 +41,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -242,7 +242,7 @@ GRANT EXECUTE ON FUNCTION public.consume_invite_token_tx(TEXT) TO authenticated;
 -- 7. AUTH TRIGGER (Handles Public Registration & Admin Invite Collision)
 -- ------------------------------------------------------------------------------
 -- handle_new_user deferred to canonical FULL_A_TO_Z_DATABASE_MIGRATION.sql
- ==============================================================================
+-- ==============================================================================
 -- SUPPORT LINK BOX: SECURE INVITE, REGISTRATION & AUTHENTICATION MIGRATION
 -- ==============================================================================
 
@@ -285,7 +285,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -486,7 +486,7 @@ GRANT EXECUTE ON FUNCTION public.consume_invite_token_tx(TEXT) TO authenticated;
 -- 7. AUTH TRIGGER (Handles Public Registration & Admin Invite Collision)
 -- ------------------------------------------------------------------------------
 -- handle_new_user deferred to canonical FULL_A_TO_Z_DATABASE_MIGRATION.sql
- ==============================================================================
+-- ==============================================================================
 -- SUPPORT LINK BOX: SECURE INVITE, REGISTRATION & AUTHENTICATION MIGRATION
 -- ==============================================================================
 
@@ -529,7 +529,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -730,7 +730,7 @@ GRANT EXECUTE ON FUNCTION public.consume_invite_token_tx(TEXT) TO authenticated;
 -- 7. AUTH TRIGGER (Handles Public Registration & Admin Invite Collision)
 -- ------------------------------------------------------------------------------
 -- handle_new_user deferred to canonical FULL_A_TO_Z_DATABASE_MIGRATION.sql
- ==============================================================================
+-- ==============================================================================
 -- SUPPORT LINK BOX: SECURE INVITE, REGISTRATION & AUTHENTICATION MIGRATION
 -- ==============================================================================
 
@@ -773,7 +773,7 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public

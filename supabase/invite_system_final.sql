@@ -84,7 +84,7 @@ END $$;
 
 -- 3. Replace generator to strictly use the sequence
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -101,7 +101,6 @@ $$;
 
 -- 6. Hardened Auth Trigger
 -- handle_new_user deferred to canonical FULL_A_TO_Z_DATABASE_MIGRATION.sql
-GIN;
 
 -- 1. Create Invite Tokens table dynamically based on members.id type
 DO $$ 
@@ -187,7 +186,7 @@ END $$;
 
 -- 3. Replace generator to strictly use the sequence
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public

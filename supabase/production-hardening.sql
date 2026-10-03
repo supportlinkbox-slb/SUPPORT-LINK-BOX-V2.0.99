@@ -276,7 +276,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO public.settings (id) VALUES ('default') ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.settings (community_id) VALUES ('main') ON CONFLICT (community_id) DO NOTHING;
 
 -- Table 16: points_history (Historical daily snapshots per member)
 CREATE TABLE IF NOT EXISTS public.points_history (

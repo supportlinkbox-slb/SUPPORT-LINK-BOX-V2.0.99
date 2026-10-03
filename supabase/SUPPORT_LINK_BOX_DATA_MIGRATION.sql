@@ -54,14 +54,14 @@ WHERE m.points = 0 OR m.points IS NULL;
 
 -- 6. Ensure default system settings exist
 INSERT INTO public.settings (
-    id, community_id, submission_start_time, submission_end_time,
+    community_id, submission_start_time, submission_end_time,
     all_done_start_time, all_done_deadline_time, recovery_end_time,
     max_links_per_member, base_all_done_points, community_name, timezone
 ) VALUES (
-    'default', 'main', '10:00', '16:50',
+    'main', '10:00', '16:50',
     '17:00', '24:00', '10:00',
     1, 5, 'Support Link Box Official', 'Asia/Dhaka'
-) ON CONFLICT (id) DO UPDATE SET updated_at = NOW();
+) ON CONFLICT (community_id) DO UPDATE SET updated_at = NOW();
 
 COMMIT;
 

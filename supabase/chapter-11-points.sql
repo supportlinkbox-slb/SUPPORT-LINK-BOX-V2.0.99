@@ -6,6 +6,7 @@
 
 -- 2. New RPC: admin_adjust_points_secure
 -- Securely adjust points by Admin/Developer with mandatory reason and audit log.
+DROP FUNCTION IF EXISTS public.admin_adjust_points_secure(UUID, INTEGER, TEXT);
 CREATE OR REPLACE FUNCTION public.admin_adjust_points_secure(
     p_member_id UUID,
     p_points INTEGER,
@@ -64,9 +65,9 @@ SELECT
     member_id,
     date,
     SUM(points) as total_points,
-    COUNT(CASE WHEN activity_type = 'ALL_DONE' AND reference_id IN (SELECT id FROM all_done WHERE fastest_rank = 1) THEN 1 END) as first_place_count,
-    COUNT(CASE WHEN activity_type = 'ALL_DONE' AND reference_id IN (SELECT id FROM all_done WHERE fastest_rank = 2) THEN 1 END) as second_place_count,
-    COUNT(CASE WHEN activity_type = 'ALL_DONE' AND reference_id IN (SELECT id FROM all_done WHERE fastest_rank = 3) THEN 1 END) as third_place_count
+    COUNT(CASE WHEN activity_type = 'ALL_DONE' AND reference_id IN (SELECT id::text FROM all_done WHERE fastest_rank = 1) THEN 1 END) as first_place_count,
+    COUNT(CASE WHEN activity_type = 'ALL_DONE' AND reference_id IN (SELECT id::text FROM all_done WHERE fastest_rank = 2) THEN 1 END) as second_place_count,
+    COUNT(CASE WHEN activity_type = 'ALL_DONE' AND reference_id IN (SELECT id::text FROM all_done WHERE fastest_rank = 3) THEN 1 END) as third_place_count
 FROM public.point_transactions
 GROUP BY member_id, date;
 

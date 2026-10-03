@@ -383,7 +383,6 @@ CREATE INDEX IF NOT EXISTS idx_members_member_number ON public.members(member_nu
 
 CREATE INDEX IF NOT EXISTS idx_daily_links_member_id ON public.daily_links(member_id);
 CREATE INDEX IF NOT EXISTS idx_daily_links_date ON public.daily_links(date);
-CREATE INDEX IF NOT EXISTS idx_daily_links_active ON public.daily_links(is_active);
 
 CREATE INDEX IF NOT EXISTS idx_support_records_link_id ON public.support_records(link_id);
 CREATE INDEX IF NOT EXISTS idx_support_records_supporter_id ON public.support_records(supporter_id);
@@ -394,7 +393,6 @@ CREATE INDEX IF NOT EXISTS idx_all_done_member_id ON public.all_done(member_id);
 CREATE INDEX IF NOT EXISTS idx_all_done_date ON public.all_done(date);
 
 CREATE INDEX IF NOT EXISTS idx_invite_tokens_token_hash ON public.invite_tokens(token_hash);
-CREATE INDEX IF NOT EXISTS idx_invite_tokens_member_id ON public.invite_tokens(member_id);
 CREATE INDEX IF NOT EXISTS idx_invite_tokens_status ON public.invite_tokens(status);
 
 CREATE INDEX IF NOT EXISTS idx_notifications_member_id ON public.notifications(member_id);

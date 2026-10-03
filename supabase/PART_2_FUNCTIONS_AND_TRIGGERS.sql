@@ -28,7 +28,7 @@ $$;
 
 -- Secure Member Number Generator
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public

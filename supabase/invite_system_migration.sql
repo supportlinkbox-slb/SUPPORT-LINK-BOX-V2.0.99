@@ -54,7 +54,7 @@ DECLARE
   v_max_id INT;
 BEGIN
   -- Safe numeric extraction: regexp_replace to get digits only, ignores non-digits
-  SELECT COALESCE(MAX(NULLIF(regexp_replace(member_number, ''\D'', '''', ''g''), '''')::INT), 0)
+  SELECT COALESCE(MAX(NULLIF(regexp_replace(member_number, '\D', '', 'g'), '''')::INT), 0)
   INTO v_max_id
   FROM public.members;
 
@@ -67,7 +67,7 @@ END $$;
 
 -- 3. Replace generator to strictly use the sequence
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -84,7 +84,6 @@ $$;
 
 -- 5. Hardened Auth Trigger
 -- handle_new_user deferred to canonical FULL_A_TO_Z_DATABASE_MIGRATION.sql
-GIN;
 
 -- 1. Create Invite Tokens table dynamically based on members.id type
 DO $$ 
@@ -140,7 +139,7 @@ DECLARE
   v_max_id INT;
 BEGIN
   -- Safe numeric extraction: regexp_replace to get digits only, ignores non-digits
-  SELECT COALESCE(MAX(NULLIF(regexp_replace(member_number, ''\D'', '''', ''g''), '''')::INT), 0)
+  SELECT COALESCE(MAX(NULLIF(regexp_replace(member_number, '\D', '', 'g'), '''')::INT), 0)
   INTO v_max_id
   FROM public.members;
 
@@ -153,7 +152,7 @@ END $$;
 
 -- 3. Replace generator to strictly use the sequence
 CREATE OR REPLACE FUNCTION public.generate_member_number_secure()
-RETURNS TEXT
+RETURNS VARCHAR
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public

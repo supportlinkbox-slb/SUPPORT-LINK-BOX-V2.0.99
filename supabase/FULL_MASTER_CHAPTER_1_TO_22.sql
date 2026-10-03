@@ -1099,6 +1099,7 @@ END;
 $$;
 
 -- 5. POINTS ADJUSTMENT SECURE (CHAPTER 11)
+DROP FUNCTION IF EXISTS public.admin_adjust_points_secure(UUID, INTEGER, TEXT);
 CREATE OR REPLACE FUNCTION public.admin_adjust_points_secure(
     p_member_id UUID,
     p_points INTEGER,

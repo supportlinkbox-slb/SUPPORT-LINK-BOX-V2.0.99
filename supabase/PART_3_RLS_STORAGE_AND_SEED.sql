@@ -151,11 +151,6 @@ INSERT INTO public.communities (id, name, description)
 VALUES ('main', 'Support Link Box Official', 'Primary community partition')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.settings (key, value, description)
-VALUES 
-  ('daily_link_limit', '1'::jsonb, 'Number of links allowed per member per day'),
-  ('all_done_point_reward', '10'::jsonb, 'Points awarded for completing All-Done'),
-  ('system_maintenance_mode', 'false'::jsonb, 'Toggle system maintenance status')
-ON CONFLICT (key) DO NOTHING;
+-- v18 fix: removed stale key-value settings seed (settings is a wide per-community table; see RECONCILE_SCHEMA_V18)
 
 -- END OF PART 3

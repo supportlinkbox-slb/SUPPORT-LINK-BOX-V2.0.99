@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO public.settings (id) VALUES ('default') ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.settings (community_id) VALUES ('main') ON CONFLICT (community_id) DO NOTHING;
 
 -- 16. SCHEDULED LINKS
 CREATE TABLE IF NOT EXISTS public.scheduled_links (
@@ -548,24 +548,7 @@ $$;
 -- ====================================================================
 
 -- 1. Get Current Member Profile
-CREATE OR REPLACE FUNCTION public.rpc_get_current_member_profile()
-RETURNS public.members
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    v_auth_uid UUID := auth.uid();
-    v_member public.members%ROWTYPE;
-BEGIN
-    IF v_auth_uid IS NULL THEN
-        RAISE EXCEPTION 'UNAUTHORIZED: Authentication required.';
-    END IF;
-
-    SELECT * INTO v_member FROM public.members WHERE auth_user_id = v_auth_uid LIMIT 1;
-    RETURN v_member;
-END;
-$$;
+-- v18 fix: removed broken RETURNS public.members version (canonical JSONB version from FULL_MASTER/production-hardening is used)
 
 -- 2. Submit Daily Link
 CREATE OR REPLACE FUNCTION public.submit_daily_link_secure(
