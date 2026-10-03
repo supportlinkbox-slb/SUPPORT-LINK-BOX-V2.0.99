@@ -467,6 +467,9 @@ DECLARE
     v_part_number INTEGER;
     v_link_id UUID;
     v_existing_count INTEGER;
+    v_start_str VARCHAR(10);
+    v_end_str VARCHAR(10);
+    v_now_bdt TIME;
 BEGIN
     IF v_auth_uid IS NULL THEN
         RAISE EXCEPTION 'UNAUTHORIZED: Authentication required.';
@@ -479,6 +482,30 @@ BEGIN
 
     IF v_member.status = 'SUSPENDED' OR v_member.status = 'FROZEN' THEN
         RAISE EXCEPTION 'MEMBER_INACTIVE: Account is currently %.', v_member.status;
+    END IF;
+
+    -- Server-side submission time window enforcement for members (default 10:00-16:50 BDT)
+    IF v_member.role = 'MEMBER' THEN
+        BEGIN
+            SELECT submission_start_time, submission_end_time
+            INTO v_start_str, v_end_str
+            FROM public.settings
+            WHERE community_id = v_member.community_id OR community_id = 'main'
+            ORDER BY (community_id = 'main') DESC
+            LIMIT 1;
+        EXCEPTION WHEN OTHERS THEN
+            v_start_str := NULL;
+            v_end_str := NULL;
+        END;
+
+        IF v_start_str IS NULL OR v_start_str = '' THEN v_start_str := '10:00'; END IF;
+        IF v_end_str IS NULL OR v_end_str = '' THEN v_end_str := '16:50'; END IF;
+
+        v_now_bdt := (NOW() AT TIME ZONE 'Asia/Dhaka')::time;
+
+        IF v_now_bdt < v_start_str::time OR v_now_bdt > v_end_str::time THEN
+            RAISE EXCEPTION 'SUBMISSION_CLOSED: Link submission is open from % to % (Asia/Dhaka).', v_start_str, v_end_str;
+        END IF;
     END IF;
 
     -- Normal members: 1 link per day limit
