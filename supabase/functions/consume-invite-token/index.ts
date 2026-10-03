@@ -56,7 +56,7 @@ serve(async (req) => {
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: member.email,
       password: password,
-      email_confirm: true,
+      email_confirm: false,
       user_metadata: { is_invite_consumption: 'true' }
     });
 
