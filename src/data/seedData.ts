@@ -76,7 +76,7 @@ export const SEED_MEMBERS: MemberProfile[] = [
     id: 'admin-002',
     member_number: 'SLB-002',
     name: 'Rafiqul Admin',
-    email: 'admin.rafiq@supportlinkbox.com',
+    email: 'admin@example.com',
     role: 'ADMIN',
     status: 'ACTIVE',
     facebook_url: 'https://facebook.com/rafiq.admin',
