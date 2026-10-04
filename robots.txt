@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /landing.html
+Allow: /privacy.html
+Allow: /slb-logo.png
+Disallow: /assets/
+Disallow: /src/
+
+Sitemap: https://www.supportlinkbox.com/sitemap.xml

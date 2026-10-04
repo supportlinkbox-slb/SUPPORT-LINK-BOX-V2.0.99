@@ -537,20 +537,43 @@ export const membersApi = {
     }
   },
 
-  async rejectMember(targetId: string, reason?: string): Promise<ApiResponse<any>> {
+  async rejectMember(targetId: string, reasonCode?: string | null, customReason?: string): Promise<ApiResponse<any>> {
     try {
       if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
-      let { data, error } = await supabase.rpc('reject_member_secure', {
-        p_target_id: targetId,
-        p_reason: reason || null,
+      const { data: session } = await supabase.auth.getSession();
+      const res = await fetch(`${supabaseUrl}/functions/v1/admin-reject-member`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.session?.access_token || ''}`,
+          'apikey': supabaseAnonKey,
+        },
+        body: JSON.stringify({ member_id: targetId, reason_code: reasonCode || null, custom_reason: customReason || '' }),
       });
+      const json = await res.json();
+      if (!json.success) return { success: false, error: json.error || 'Reject failed' };
+      return { success: true, data: json };
+    } catch (err: any) {
+      return { success: false, error: formatSupabaseError(err) };
+    }
+  },
 
-      if (error && error.message.includes('function') && error.message.includes('does not exist')) {
-        return this.updateStatus(targetId, 'REMOVED', reason || 'Registration rejected');
-      }
-
-      if (error) return { success: false, error: formatSupabaseError(error) };
-      return { success: true, data };
+  async blacklistMember(targetId: string, email: string, fbLink: string, reason: string): Promise<ApiResponse<any>> {
+    try {
+      if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+      const { data: session } = await supabase.auth.getSession();
+      const res = await fetch(`${supabaseUrl}/functions/v1/admin-blacklist-member`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.session?.access_token || ''}`,
+          'apikey': supabaseAnonKey,
+        },
+        body: JSON.stringify({ member_id: targetId, email, fb_link: fbLink, reason }),
+      });
+      const json = await res.json();
+      if (!json.success) return { success: false, error: json.error || 'Blacklist failed' };
+      return { success: true, data: json };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
     }

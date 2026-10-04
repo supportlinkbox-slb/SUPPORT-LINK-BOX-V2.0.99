@@ -1,0 +1,20 @@
+# Supabase Edge Functions config
+# Ensures pre-login functions stay public when deployed via CLI/GitHub Actions.
+
+[functions.auth-login]
+verify_jwt = false
+
+[functions.consume-invite-token]
+verify_jwt = false
+
+[functions.admin-create-invite]
+verify_jwt = true
+
+[functions.admin-revoke-invite]
+verify_jwt = true
+
+[functions.bdt-10am-recovery-cron]
+verify_jwt = true
+
+[functions.lifecycle-google-sheets]
+verify_jwt = true

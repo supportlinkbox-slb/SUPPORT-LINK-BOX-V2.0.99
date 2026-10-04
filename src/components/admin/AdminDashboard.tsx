@@ -34,6 +34,7 @@ import { useApp } from '../../context/AppContext';
 import { MemberProfile, UserRole, MemberStatus } from '../../types';
 import { MemberDetailsModal } from './MemberDetailsModal';
 import { MemberActionConfirmModal, ActionModalState } from './MemberActionConfirmModal';
+import { RejectMemberModal } from './RejectMemberModal';;
 import { formatToBDT } from '../../utils/bangladeshTime';
 import { AdminInviteMember } from './AdminInviteMember';
 import { AdminInviteList } from './AdminInviteList';
@@ -54,6 +55,7 @@ export const AdminDashboard: React.FC = () => {
     fetchPaginatedMembers,
     approveMember,
     rejectMember,
+    blacklistMember,
     updateMemberRole,
     updateMemberStatus,
     deleteDailyLink,
@@ -79,6 +81,7 @@ export const AdminDashboard: React.FC = () => {
   const [selectedMember, setSelectedMember] = useState<MemberProfile | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [confirmModalState, setConfirmModalState] = useState<ActionModalState | null>(null);
+  const [rejectModalMember, setRejectModalMember] = useState<MemberProfile | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [isNoticeGeneratorOpen, setIsNoticeGeneratorOpen] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
@@ -149,17 +152,38 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const openRejectConfirm = (target: MemberProfile) => {
-    setConfirmModalState({
-      isOpen: true,
-      type: 'REJECT',
-      target,
-      title: 'রেজিস্ট্রেশন বাতিল (Reject Registration)',
-      message: `আপনি কি ${target.name} (${target.member_number})-এর রেজিস্ট্রেশন আবেদন বাতিল করতে চান?`,
-      warning: 'আবেদন বাতিল করা হলে এই ব্যবহারকারী সিস্টেমে লগইন করতে পারবেন না।',
-      confirmBtnText: 'বাতিল করুন (Reject)',
-      isDanger: true,
-      requiresReason: true,
-    });
+    setRejectModalMember(target);
+  };
+
+  const handleRejectMember = async (memberId: string, reasonCode: string | null, customReason: string) => {
+    setIsProcessingAction(true);
+    try {
+      const res = await rejectMember(memberId, reasonCode, customReason);
+      if (!res.success) throw new Error(res.error || 'Reject failed');
+      setRejectModalMember(null);
+      setIsDetailsOpen(false);
+      await refreshData();
+    } catch (err: any) {
+      alert('Reject ব্যর্থ: ' + (err.message || 'অজানা ত্রুটি'));
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleBlacklistMember = async (memberId: string, email: string, fbLink: string, reason: string) => {
+    setIsProcessingAction(true);
+    try {
+      const res = await blacklistMember(memberId, email, fbLink, reason);
+      if (!res.success) throw new Error(res.error || 'Blacklist failed');
+      setRejectModalMember(null);
+      setIsDetailsOpen(false);
+      await refreshData();
+      alert('ব্ল্যাকলিস্ট সম্পন্ন ✅');
+    } catch (err: any) {
+      alert('Blacklist ব্যর্থ: ' + (err.message || 'অজানা ত্রুটি'));
+    } finally {
+      setIsProcessingAction(false);
+    }
   };
 
   const openRoleChangeConfirm = (target: MemberProfile, newRole: UserRole) => {
@@ -1222,6 +1246,14 @@ export const AdminDashboard: React.FC = () => {
           isProcessing={isProcessingAction}
         />
       )}
+
+      <RejectMemberModal
+        member={rejectModalMember}
+        onClose={() => setRejectModalMember(null)}
+        onReject={handleRejectMember}
+        onBlacklist={handleBlacklistMember}
+        isProcessing={isProcessingAction}
+      />
 
       {/* Admin Inactivity Notice Generator Modal */}
       {isNoticeGeneratorOpen && (

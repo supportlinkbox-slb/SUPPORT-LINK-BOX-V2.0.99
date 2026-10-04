@@ -243,7 +243,8 @@ interface AppContextType {
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>;
   approveMember: (targetId: string) => Promise<{ success: boolean; error?: string }>;
-  rejectMember: (targetId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
+  rejectMember: (targetId: string, reasonCode?: string | null, customReason?: string) => Promise<{ success: boolean; error?: string }>;
+  blacklistMember: (targetId: string, email: string, fbLink: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   adminRestoreMember: (targetId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   updateMemberProfile: (
     targetId: string,
@@ -2481,13 +2482,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true };
   };
 
-  const rejectMember = async (targetId: string, reason?: string) => {
+  const rejectMember = async (targetId: string, reasonCode?: string | null, customReason?: string) => {
     if (!currentUser || currentUser.role === 'MEMBER') {
       return { success: false, error: 'Admin permission required' };
     }
 
     if (isSupabaseConfigured) {
-      const res = await membersApi.rejectMember(targetId, reason);
+      const res = await membersApi.rejectMember(targetId, reasonCode, customReason);
       if (!res.success) {
         return { success: false, error: res.error };
       }
@@ -2499,7 +2500,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!target) return { success: false, error: 'Member not found' };
 
     setMembers((prev) => prev.map((m) => (m.id === targetId ? { ...m, status: 'REMOVED' } : m)));
-    addAuditLog('MEMBER_REJECTED', 'MEMBER', targetId, `Rejected registration of ${target.name}. Reason: ${reason || 'No reason provided'}`);
+    addAuditLog('MEMBER_REJECTED', 'MEMBER', targetId, `Rejected registration of ${target.name}. Reason: ${customReason || reasonCode || 'No reason provided'}`);
     return { success: true };
   };
 
@@ -2789,7 +2790,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     updateMemberRole,
     updateMemberStatus,
     approveMember,
+
+  const blacklistMember = async (targetId: string, email: string, fbLink: string, reason: string) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'Admin permission required' };
+    }
+    if (isSupabaseConfigured) {
+      const res = await membersApi.blacklistMember(targetId, email, fbLink, reason);
+      if (!res.success) return { success: false, error: res.error };
+      await refreshData();
+      return { success: true };
+    }
+    return { success: false, error: 'Supabase not configured' };
+  };
+
     rejectMember,
+    blacklistMember,
     adminRestoreMember,
     updateMemberProfile,
     updateMemberSchedulePermission,
