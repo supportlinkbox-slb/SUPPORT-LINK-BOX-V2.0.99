@@ -45,12 +45,19 @@ serve(async (req) => {
 
     const { data: member, error: memberError } = await supabaseAdmin
       .from('members')
-      .select('id, email, auth_user_id, status')
+      .select('id, email, auth_user_id, status, facebook_url')
       .eq('id', tokenRecord.member_id)
       .single();
 
     if (memberError || !member) throw new Error('MEMBER_NOT_FOUND');
     if (member.auth_user_id) throw new Error('ALREADY_LINKED');
+
+    // BLACKLIST CHECK — defense in depth (blocked even if invite was created)
+    const { data: isBl } = await supabaseAdmin.rpc('is_blacklisted', {
+      p_email: member.email,
+      p_fb_link: member.facebook_url || null,
+    });
+    if (isBl === true) throw new Error('BLACKLISTED');
 
     // 3. Create Supabase Auth User (Bypasses handle_new_user using metadata)
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
