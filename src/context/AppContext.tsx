@@ -2503,6 +2503,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addAuditLog('MEMBER_REJECTED', 'MEMBER', targetId, `Rejected registration of ${target.name}. Reason: ${customReason || reasonCode || 'No reason provided'}`);
     return { success: true };
   };
+  const blacklistMember = async (targetId: string, email: string, fbLink: string, reason: string) => {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
+      return { success: false, error: 'Admin permission required' };
+    }
+    if (isSupabaseConfigured) {
+      const res = await membersApi.blacklistMember(targetId, email, fbLink, reason);
+      if (!res.success) return { success: false, error: res.error };
+      await refreshData();
+      return { success: true };
+    }
+    return { success: false, error: 'Supabase not configured' };
+  };
 
   const adminRestoreMember = async (targetId: string, reason: string) => {
     if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
@@ -2791,18 +2803,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     updateMemberStatus,
     approveMember,
 
-  const blacklistMember = async (targetId: string, email: string, fbLink: string, reason: string) => {
-    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'DEVELOPER')) {
-      return { success: false, error: 'Admin permission required' };
-    }
-    if (isSupabaseConfigured) {
-      const res = await membersApi.blacklistMember(targetId, email, fbLink, reason);
-      if (!res.success) return { success: false, error: res.error };
-      await refreshData();
-      return { success: true };
-    }
-    return { success: false, error: 'Supabase not configured' };
-  };
 
     rejectMember,
     blacklistMember,
