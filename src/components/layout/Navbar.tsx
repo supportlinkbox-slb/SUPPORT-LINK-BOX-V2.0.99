@@ -126,11 +126,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCurrentTab('links')}>
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${
-              isFestival ? currentThemeConfig.primaryGradient : 'from-cyan-500 to-blue-600'
-            } flex items-center justify-center shadow-md text-white font-black text-xl transition-all duration-500`}>
-              {isFestival ? <span className="text-lg select-none">{currentThemeConfig.icon}</span> : 'SLB'}
-            </div>
+            {isFestival ? (
+              <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${currentThemeConfig.primaryGradient} flex items-center justify-center shadow-md text-white font-black text-xl transition-all duration-500`}>
+                <span className="text-lg select-none">{currentThemeConfig.icon}</span>
+              </div>
+            ) : (
+              <img src="/slb-logo.png" alt="SLB" className="w-10 h-10 rounded-xl shadow-md object-cover" />
+            )}
             <div>
               <div className="flex items-center gap-1.5 font-extrabold text-base tracking-tight text-white">
                 <span>SUPPORT LINK BOX</span>

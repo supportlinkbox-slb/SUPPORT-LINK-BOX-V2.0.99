@@ -344,9 +344,7 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-lg mx-auto space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-xl shadow-cyan-500/20 text-white font-black text-2xl mx-auto">
-            SLB
-          </div>
+          <img src="/slb-logo.png" alt="SLB" className="w-20 h-20 rounded-full shadow-xl shadow-cyan-500/20 mx-auto object-cover" />
           <h1 className="text-2xl font-black tracking-tight text-white">SUPPORT LINK BOX</h1>
           <p className="text-xs text-slate-400 font-medium">
             বাংলাদেশ ফেসবুক ক্রিয়েটর ও মেম্বার এনগেজমেন্ট প্ল্যাটফর্ম
