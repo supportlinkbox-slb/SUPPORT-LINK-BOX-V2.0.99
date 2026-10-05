@@ -33,6 +33,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { MemberProfile, UserRole, MemberStatus } from '../../types';
 import { MemberDetailsModal } from './MemberDetailsModal';
+import { ProfileChangeReviewPanel } from './ProfileChangeReviewPanel';
 import { MemberActionConfirmModal, ActionModalState } from './MemberActionConfirmModal';
 import { RejectMemberModal } from './RejectMemberModal';;
 import { formatToBDT } from '../../utils/bangladeshTime';
@@ -311,6 +312,8 @@ export const AdminDashboard: React.FC = () => {
           icon={<ShieldAlert className="w-5 h-5" />}
         />
       </div>
+
+      <ProfileChangeReviewPanel />
 
       {/* Admin Module Control Grid (Clean Grid Layout - No Horizontal Sliding Required) */}
       <div className="space-y-2 pt-1">

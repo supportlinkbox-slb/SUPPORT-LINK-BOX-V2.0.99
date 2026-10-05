@@ -6,3 +6,4 @@ coverage/
 *.log
 .env*
 !.env.example
+SUPPORT-LINK-BOX-V2.0.99/

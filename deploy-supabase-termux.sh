@@ -13,19 +13,12 @@ echo ""
 export PGHOST PGUSER PGPASSWORD
 export PGDATABASE=postgres PGPORT=5432
 
-read -p "Wipe public schema before deploy? (type WIPE to confirm, Enter to skip): " WIPE
-if [ "$WIPE" = "WIPE" ]; then
-  echo "--- Wiping public schema ---"
-  psql -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" || { echo "wipe failed, aborting."; unset PGPASSWORD; exit 1; }
-fi
-
 echo "--- 0. Enabling pg_cron ---"
 psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pg_cron;" || { echo "pg_cron failed, aborting."; unset PGPASSWORD; exit 1; }
 
 FILES=(
   "supabase/FULL_A_TO_Z_DATABASE_MIGRATION.sql"
   "supabase/PART_1_SCHEMA_TABLES_INDEXES.sql"
-  "supabase/RECONCILE_SCHEMA_V18.sql"
   "supabase/PART_2_FUNCTIONS_AND_TRIGGERS.sql"
   "supabase/PART_3_RLS_STORAGE_AND_SEED.sql"
   "supabase/FULL_MASTER_CHAPTER_1_TO_22.sql"
@@ -51,9 +44,8 @@ FILES=(
 )
 
 i=1
-total=${#FILES[@]}
 for f in "${FILES[@]}"; do
-  echo "--- [$i/$total] $f ---"
+  echo "--- [$i/24] $f ---"
   [ -f "$f" ] || { echo "FILE NOT FOUND: $f — aborting."; unset PGPASSWORD; exit 1; }
   psql -v ON_ERROR_STOP=1 -f "$f" > /dev/null || { echo "FAILED at file $i: $f — fix and re-run from this file."; unset PGPASSWORD; exit 1; }
   i=$((i+1))

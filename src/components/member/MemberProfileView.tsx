@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { ProfileChangeRequestModal } from './ProfileChangeRequestModal';
 import { formatToBDT } from '../../utils/bangladeshTime';
 
 interface MemberProfileViewProps {
@@ -34,6 +35,7 @@ export const MemberProfileView: React.FC<MemberProfileViewProps> = ({ onNavigate
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showChangeRequest, setShowChangeRequest] = useState(false);
 
   if (!currentUser) return null;
 
@@ -136,13 +138,28 @@ export const MemberProfileView: React.FC<MemberProfileViewProps> = ({ onNavigate
             </div>
           </div>
 
-          <button
-            onClick={() => logout()}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/60 text-xs font-bold transition self-start sm:self-center"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>লগআউট করুন</span>
-          </button>
+          <div className="flex flex-col gap-2 self-start sm:self-center">
+            <button
+              onClick={() => setShowChangeRequest(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-800/60 text-xs font-bold transition"
+            >
+              <Settings className="w-4 h-4" />
+              <span>প্রোফাইল পরিবর্তনের আবেদন</span>
+            </button>
+            <button
+              onClick={() => logout()}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/60 text-xs font-bold transition"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>লগআউট করুন</span>
+            </button>
+          </div>
+          <ProfileChangeRequestModal
+            isOpen={showChangeRequest}
+            onClose={() => setShowChangeRequest(false)}
+            currentName={currentUser.name}
+            currentPhotoUrl={currentUser.profile_photo_url || ''}
+          />
         </div>
 
         {/* Stats Grid */}
