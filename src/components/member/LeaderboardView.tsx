@@ -47,28 +47,23 @@ export const LeaderboardView: React.FC = () => {
       );
     }
 
+    // SLB-FIX-M23: sort matches the server RPC exactly — period points DESC, then total_all_done DESC
     if (period === 'DAILY') {
       return list.sort((a, b) => {
         const ptsDiff = (b.daily_points ?? 0) - (a.daily_points ?? 0);
         if (ptsDiff !== 0) return ptsDiff;
-        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
-        if (linksDiff !== 0) return linksDiff;
         return (b.total_all_done || 0) - (a.total_all_done || 0);
       });
     } else if (period === 'WEEKLY' || period === 'HISTORICAL') {
       return list.sort((a, b) => {
         const ptsDiff = (b.weekly_points || 0) - (a.weekly_points || 0);
         if (ptsDiff !== 0) return ptsDiff;
-        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
-        if (linksDiff !== 0) return linksDiff;
         return (b.total_all_done || 0) - (a.total_all_done || 0);
       });
     } else if (period === 'MONTHLY') {
       return list.sort((a, b) => {
         const ptsDiff = (b.monthly_points ?? b.points) - (a.monthly_points ?? a.points);
         if (ptsDiff !== 0) return ptsDiff;
-        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
-        if (linksDiff !== 0) return linksDiff;
         return (b.total_all_done || 0) - (a.total_all_done || 0);
       });
     } else {
@@ -76,8 +71,6 @@ export const LeaderboardView: React.FC = () => {
       return list.sort((a, b) => {
         const ptsDiff = (b.points || 0) - (a.points || 0);
         if (ptsDiff !== 0) return ptsDiff;
-        const linksDiff = (b.total_links_submitted || 0) - (a.total_links_submitted || 0);
-        if (linksDiff !== 0) return linksDiff;
         return (b.total_all_done || 0) - (a.total_all_done || 0);
       });
     }
@@ -336,12 +329,12 @@ export const LeaderboardView: React.FC = () => {
                         <span>{member.member_number}</span>
                         <span>•</span>
                         <span>{member.total_supports_given} supports</span>
-                        {member.streak_days ? (
+                        {member.current_streak ? (
                           <>
                             <span>•</span>
                             <span className="text-amber-400 flex items-center gap-0.5">
                               <Flame className="w-3 h-3 text-amber-500" />
-                              {member.streak_days}d streak
+                              {member.current_streak}d streak
                             </span>
                           </>
                         ) : null}

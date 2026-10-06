@@ -427,7 +427,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
 
           <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
             <span className="text-slate-400">সময়সীমা</span>
-            <span className="text-slate-300 font-mono">বিকাল ৫:০০ - রাত ১১:৫৯</span>
+            <span className="text-slate-300 font-mono">বিকাল ৫:০০ - রাত ১২:০০</span>{/* SLB-FIX-L18: R5 window is 17:00-00:00 */}
           </div>
         </div>
 

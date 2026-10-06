@@ -30,6 +30,7 @@ export const AllDoneSection: React.FC<AllDoneSectionProps> = ({ onGoToSupportSes
     userAllDoneRecord,
     allDoneRecords,
     todayDate,
+    systemConfig, // SLB-FIX-H16
   } = useApp();
 
   const todaysAllDoneCount = allDoneRecords.filter((r) => r.date === todayDate).length;
@@ -63,26 +64,31 @@ export const AllDoneSection: React.FC<AllDoneSectionProps> = ({ onGoToSupportSes
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
               <span>Fastest Support Bonuses</span>
             </div>
+            {/* SLB-FIX-H16-banner: values from systemConfig (server-configured); server awards ranks 1-5 only */}
             <div className="space-y-1 font-mono text-xs">
               <div className="flex justify-between text-amber-300">
                 <span>🥇 1st Fastest</span>
-                <span>+50 Pts</span>
+                <span>+{systemConfig.points_fastest_top1 ?? 10} Pts</span>
               </div>
               <div className="flex justify-between text-slate-300">
                 <span>🥈 2nd Fastest</span>
-                <span>+30 Pts</span>
+                <span>+{systemConfig.points_fastest_top2 ?? 8} Pts</span>
               </div>
               <div className="flex justify-between text-amber-600">
                 <span>🥉 3rd Fastest</span>
-                <span>+20 Pts</span>
+                <span>+{systemConfig.points_fastest_top3 ?? 6} Pts</span>
               </div>
               <div className="flex justify-between text-cyan-400">
-                <span>✨ 4th-10th Rank</span>
-                <span>+10 Pts</span>
+                <span>4th Fastest</span>
+                <span>+{systemConfig.points_fastest_top4 ?? 4} Pts</span>
+              </div>
+              <div className="flex justify-between text-cyan-400">
+                <span>5th Fastest</span>
+                <span>+{systemConfig.points_fastest_top5 ?? 2} Pts</span>
               </div>
               <div className="flex justify-between text-slate-400 border-t border-slate-800/80 pt-1">
                 <span>Standard Completion</span>
-                <span>+5 Pts</span>
+                <span>+{systemConfig.points_all_done ?? 5} Pts</span>
               </div>
             </div>
           </div>

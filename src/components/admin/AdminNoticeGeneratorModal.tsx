@@ -246,7 +246,7 @@ export const AdminNoticeGeneratorModal: React.FC<AdminNoticeGeneratorModalProps>
                 <option value="WARNING">সতর্কবার্তা (WARNING)</option>
                 <option value="SYSTEM">সাধারণ নোটিশ (SYSTEM)</option>
                 <option value="ALERT_WARNING">জরুরি অ্যালার্ট (ALERT)</option>
-                <option value="KICKOUT_NOTICE">বহিষ্কার নোটিশ (KICKOUT)</option>
+                <option value="KICKOUT_WARNING">বহিষ্কার নোটিশ (KICKOUT)</option>
               </select>
             </div>
 

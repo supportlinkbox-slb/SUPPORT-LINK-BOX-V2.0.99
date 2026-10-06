@@ -83,12 +83,15 @@ export function isWithinSubmissionWindow(
 ): { isOpen: boolean; isAdminWindow: boolean; windowType: 'CLOSED' | 'MEMBER' | 'ADMIN_SPECIAL'; message: string } {
   const now = getBangladeshNow();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  // SLB-FIX-M5: second-granularity close so the UI matches the server's 16:50:00.000 cutoff
+  const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
   const [startH, startM] = startTime.split(':').map(Number);
   const [endH, endM] = endTime.split(':').map(Number);
 
   const startMinutes = startH * 60 + startM; // 10:00 AM = 600 min
   const endMinutes = endH * 60 + endM; // 04:50 PM = 1010 min
+  const endSeconds = endH * 3600 + endM * 60; // 16:50:00 sharp
 
   const adminStartMinutes = 16 * 60 + 51; // 04:51 PM = 1011 min
   const adminEndMinutes = 16 * 60 + 59;   // 04:59 PM = 1019 min
@@ -112,7 +115,7 @@ export function isWithinSubmissionWindow(
     };
   }
 
-  if (currentMinutes > endMinutes) {
+  if (currentSeconds >= endSeconds) {
     return {
       isOpen: false,
       isAdminWindow: false,
@@ -183,14 +186,19 @@ export function isWithinAllDoneWindow(
 }
 
 /**
- * Check if the member is within the 2-minute edit/delete grace period
+ * SLB-FIX-M6: honor the server-provided can_edit_until (no extra +120s).
+ * Falls back to submitted_at + 2 minutes when the server value is absent.
  */
-export function canEditSubmission(submittedAtIso: string): boolean {
+export function canEditSubmission(canEditUntilIso?: string | null, submittedAtIso?: string | null): boolean {
   try {
-    const subTime = new Date(submittedAtIso).getTime();
     const nowTime = new Date().getTime();
-    const diffSeconds = (nowTime - subTime) / 1000;
-    return diffSeconds <= 120; // 2 minutes (120 seconds)
+    if (canEditUntilIso) {
+      return nowTime <= new Date(canEditUntilIso).getTime();
+    }
+    if (submittedAtIso) {
+      return (nowTime - new Date(submittedAtIso).getTime()) / 1000 <= 120;
+    }
+    return false;
   } catch {
     return false;
   }

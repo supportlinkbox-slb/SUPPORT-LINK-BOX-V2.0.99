@@ -46,6 +46,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
     userAllDoneRecord,
     submitAllDone,
     refreshData,
+    systemConfig, // SLB-FIX-H16
   } = useApp();
 
   // Filter only active links for today, sorted by serial_number ASC (Chapter 8 Rule)
@@ -402,7 +403,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-xs font-black shadow-lg shadow-emerald-500/25 transition transform hover:scale-105 active:scale-95 flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4 fill-slate-950" />
-                <span>{isAllDoneSubmitting ? 'সাবমিট হচ্ছে...' : 'All Done সাবমিট করুন (+5)'}</span>
+                <span>{isAllDoneSubmitting ? 'সাবমিট হচ্ছে...' : `All Done সাবমিট করুন (+${systemConfig.points_all_done ?? 5})`}</span>
               </button>
             )}
 
@@ -764,7 +765,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({ 
               ) : (
                 <CheckCircle2 className="w-5 h-5 fill-slate-950" />
               )}
-              <span>{isAllDoneSubmitting ? 'সাবমিট ও ভেরিফাই হচ্ছে...' : 'ALL DONE নিশ্চিত করুন (+5 Points)'}</span>
+              <span>{isAllDoneSubmitting ? 'সাবমিট ও ভেরিফাই হচ্ছে...' : `ALL DONE নিশ্চিত করুন (+${systemConfig.points_all_done ?? 5} Points)`}</span>
             </button>
           </div>
         </div>

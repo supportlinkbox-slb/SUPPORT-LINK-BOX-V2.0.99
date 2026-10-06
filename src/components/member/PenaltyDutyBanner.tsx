@@ -2,11 +2,11 @@ import React from 'react';
 import { AlertOctagon, ShieldAlert, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
-interface SpecialSupportDutyBannerProps {
+interface PenaltyDutyBannerProps { // SLB-FIX-L14
   onGoToSupport?: () => void;
 }
 
-export const SpecialSupportDutyBanner: React.FC<SpecialSupportDutyBannerProps> = ({ onGoToSupport }) => {
+export const PenaltyDutyBanner: React.FC<PenaltyDutyBannerProps> = ({ onGoToSupport }) => {
   const { activePenalty } = useApp();
 
   if (!activePenalty) return null;

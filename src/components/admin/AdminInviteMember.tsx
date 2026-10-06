@@ -59,10 +59,13 @@ export const AdminInviteMember: React.FC = () => {
       setFacebookName('');
       setProfilePhotoUrl('');
     } catch (err: any) {
-      if (err.message === 'DUPLICATE_FACEBOOK') {
+      // SLB-FIX-L5: match the real edge-function codes (DUPLICATE_FACEBOOK is never thrown)
+      if (err.message === 'DUPLICATE_FACEBOOK_IDENTITY') {
         setErrorMsg('এই ফেসবুক আইডির অধীনে ইতিমধ্যে একটি অ্যাকাউন্ট রয়েছে।');
       } else if (err.message === 'DUPLICATE_EMAIL') {
         setErrorMsg('এই ইমেইলটি ইতিমধ্যে ব্যবহৃত হয়েছে।');
+      } else if (err.message === 'BLACKLISTED') {
+        setErrorMsg('এই ইমেইল/Facebook ID কালো তালিকাভুক্ত — ইনভাইট দেওয়া যাবে না।');
       } else {
         setErrorMsg(err.message || 'অজানা ত্রুটি।');
       }

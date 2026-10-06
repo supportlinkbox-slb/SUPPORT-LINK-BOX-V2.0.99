@@ -33,6 +33,14 @@ export const SUPPORT_ERROR_MESSAGES: Record<string, string> = {
   SUPPORT_REQUIREMENTS_INCOMPLETE: 'All Done সম্ভব নয়! আপনার সবগুলো সাপোর্ট এখনো সম্পন্ন হয়নি।',
   INCOMPLETE_SUPPORT: 'All Done সম্ভব নয়! আপনার সবগুলো সাপোর্ট এখনো সম্পন্ন হয়নি।',
   ALL_DONE_NOT_ELIGIBLE: 'আপনি All Done দেওয়ার জন্য যোগ্য নন।',
+  INCIDENT_NOT_FOUND: 'তথ্যটি খুঁজে পাওয়া যায়নি। রিফ্রেশ করে আবার চেষ্টা করুন।',
+  // SLB-FIX-L20 / SLB-FIX-M19: raw Postgres codes surfaced from RPC failures
+  '23505': 'এই তথ্যটি ইতিমধ্যে জমা দেওয়া হয়েছে।',
+  'duplicate key value': 'এই তথ্যটি ইতিমধ্যে জমা দেওয়া হয়েছে।',
+  '23503': 'সম্পর্কিত তথ্য খুঁজে পাওয়া যায়নি।',
+  '23514': 'ডেটা যাচাইকরণ ব্যর্থ হয়েছে।',
+  '42501': 'এই কাজের অনুমতি আপনার নেই।',
+  'permission denied': 'এই কাজের অনুমতি আপনার নেই।',
 };
 
 export function getBengaliSupportErrorMessage(errorCodeOrMessage?: string): string {

@@ -34,7 +34,7 @@ const TEMPLATE_PRESETS = {
     title: '⚠️ চূড়ান্ত সতর্কবার্তা: ইন-অ্যাক্টিভ অ্যাকাউন্ট',
     content: 'জরুরি নোটিশ: {member_name} ({member_number}), আপনি {days_inactive} দিন ধরে সম্পূর্ণ নিষ্ক্রিয়। পরবর্তী ২৪ ঘণ্টার মধ্যে নিয়মিত না হলে আপনার বিরুদ্ধে শাস্তিমূলক ব্যবস্থা ও স্পেশাল সাপোর্ট ডিউটি কার্যকর করা হবে।',
   },
-  KICKOUT_NOTICE: {
+  KICKOUT_WARNING: {
     title: '🔴 সদস্যপদ বাতিল বিজ্ঞপ্তি (Kickout Notice)',
     content: 'বহিষ্কার বিজ্ঞপ্তি: {member_name} ({member_number}), দীর্ঘ {days_inactive} দিন অননুমোদিত নিষ্ক্রিয়তা এবং সতর্কবার্তা উপেক্ষা করার কারণে আপনার মেম্বারশিপ বাতিল করা হয়েছে।',
   },
@@ -72,7 +72,7 @@ export const NoticeSection: React.FC = () => {
   // Inactive members list for bulk selector
   const inactiveMembers = useMemo(() => {
     return members.filter((m) => {
-      if (selectedType === 'KICKOUT_NOTICE') {
+      if (selectedType === 'KICKOUT_WARNING') {
         return m.status === 'REMOVED' || m.status === 'BANNED';
       }
       return m.status === 'ACTIVE';
@@ -88,7 +88,7 @@ export const NoticeSection: React.FC = () => {
     if (newType === 'ALERT_WARNING') {
       setPriority('HIGH');
       setDaysInactiveFilter(5);
-    } else if (newType === 'KICKOUT_NOTICE') {
+    } else if (newType === 'KICKOUT_WARNING') {
       setPriority('URGENT');
       setDaysInactiveFilter(7);
       // Reset selected member if active
@@ -135,7 +135,7 @@ export const NoticeSection: React.FC = () => {
           return;
         }
 
-        if (selectedType === 'KICKOUT_NOTICE' && selectedMember?.status === 'ACTIVE') {
+        if (selectedType === 'KICKOUT_WARNING' && selectedMember?.status === 'ACTIVE') {
           setStatusMessage({
             type: 'error',
             text: 'সতর্কতা: কোনো অ্যাক্টিভ মেম্বারকে Kickout Notice পাঠানো যাবে না। শুধুমাত্র বহিষ্কৃত বা রিমুভড মেম্বার নির্বাচন করুন।',
@@ -221,7 +221,7 @@ export const NoticeSection: React.FC = () => {
     }
 
     switch (notice.type) {
-      case 'KICKOUT_NOTICE':
+      case 'KICKOUT_WARNING':
       case 'KICKOUT_WARNING':
         return (
           <span className="bg-red-950 text-red-300 border border-red-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -441,9 +441,9 @@ export const NoticeSection: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => handleTypeChange('KICKOUT_NOTICE')}
+                    onClick={() => handleTypeChange('KICKOUT_WARNING')}
                     className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 ${
-                      selectedType === 'KICKOUT_NOTICE'
+                      selectedType === 'KICKOUT_WARNING'
                         ? 'bg-red-950/40 border-red-500 text-red-200'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
@@ -517,16 +517,16 @@ export const NoticeSection: React.FC = () => {
                       <option
                         key={m.id}
                         value={m.id}
-                        disabled={selectedType === 'KICKOUT_NOTICE' && m.status === 'ACTIVE'}
+                        disabled={selectedType === 'KICKOUT_WARNING' && m.status === 'ACTIVE'}
                       >
                         {m.name} ({m.member_number}) — {m.status}{' '}
-                        {selectedType === 'KICKOUT_NOTICE' && m.status === 'ACTIVE'
+                        {selectedType === 'KICKOUT_WARNING' && m.status === 'ACTIVE'
                           ? ' [Kickout নিষিদ্ধ: Active Member]'
                           : ''}
                       </option>
                     ))}
                   </select>
-                  {selectedType === 'KICKOUT_NOTICE' && selectedMember?.status === 'ACTIVE' && (
+                  {selectedType === 'KICKOUT_WARNING' && selectedMember?.status === 'ACTIVE' && (
                     <p className="text-[11px] text-red-400 mt-1">
                       ⚠️ নীতিমালার নিয়ম: অ্যাক্টিভ মেম্বারকে Kickout Notice পাঠানো নিষেধ।
                     </p>
@@ -663,4 +663,4 @@ export const NoticeSection: React.FC = () => {
     </div>
   );
 };
-
+// SLB-FIX-M31: KICKOUT_NOTICE -> KICKOUT_WARNING unification

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, RefreshCw, User, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useApp } from '../../context/AppContext'; // SLB-FIX-L31
 
 interface ChangeRequest {
   id: string;
@@ -17,6 +18,7 @@ interface ChangeRequest {
 }
 
 export const ProfileChangeReviewPanel: React.FC = () => {
+  const { refreshData } = useApp(); // SLB-FIX-L31
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
@@ -77,6 +79,8 @@ export const ProfileChangeReviewPanel: React.FC = () => {
       } else {
         setMsg({ type: 'success', text: approve ? 'অনুমোদন দেওয়া হয়েছে।' : 'বাতিল করা হয়েছে।' });
         setRequests((prev) => prev.filter((r) => r.id !== id));
+        // SLB-FIX-L31: refresh member data so the member sees the new name/photo
+        await refreshData();
       }
     } catch (err: any) {
       setMsg({ type: 'error', text: 'সিদ্ধান্ত নেওয়া যায়নি। আবার চেষ্টা করো।' });

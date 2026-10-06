@@ -60,7 +60,11 @@ export function formatSupabaseError(error: any): string {
   const msg = typeof error === 'string' ? error : error.message || error.details || JSON.stringify(error);
 
   if (msg.includes('LINK_ALREADY_SUBMITTED')) {
-    return 'আপনি ইতিমধ্যে আজকের লিংক জমা দিয়েছেন। দিনে সর্বোচ্চ ১ টি লিংক অনুমোদনযোগ্য।';
+    return 'আপনি ইতিমধ্যে আজকের লিংক জমা দিয়েছেন। দিনে সর্বোচ্চ ১ টি লিংক অনুমোদনযোগ্য।';
+  }
+  // SLB-FIX-SUBMIT-NOT-ALLOWED: server raises this when members.can_submit_links=false
+  if (msg.includes('SUBMIT_NOT_ALLOWED')) {
+    return 'আপনার লিংক সাবমিশন অনুমতি বন্ধ আছে।';
   }
   if (msg.includes('SELF_SUPPORT_FORBIDDEN')) {
     return 'নিজের লিংকে সাপোর্ট দেওয়া যাবে না।';
@@ -150,6 +154,22 @@ export const authApi = {
       }
       if (!params.password || params.password.length < 6) {
         return { success: false, error: 'আরও শক্তিশালী Password দিন (কমপক্ষে ৬ অক্ষর)।' };
+      }
+
+      // SLB-FIX-C14: blacklist pre-check before auth.signUp. Best-effort via the
+      // anon-callable is_blacklisted RPC; if the check itself errors (RPC missing),
+      // continue with signup so the normal path never breaks. Server/edge paths
+      // enforce the blacklist again authoritatively.
+      try {
+        const { data: blBlocked, error: blErr } = await supabase.rpc('is_blacklisted', {
+          p_email: normalizedEmail,
+          p_fb_link: params.facebookUrl?.trim() || null,
+        });
+        if (!blErr && blBlocked === true) {
+          return { success: false, error: 'এই ইমেইল/Facebook ID কালো তালিকাভুক্ত — রেজিস্ট্রেশন স্থায়ীভাবে বন্ধ।' };
+        }
+      } catch (blEx) {
+        console.warn('SLB-FIX-C14 blacklist pre-check unavailable, continuing signup:', blEx);
       }
 
       // 1. Get atomic member number using RPC
@@ -923,8 +943,13 @@ export const supportApi = {
         };
       }
 
-      // If response indicated ALREADY_SUPPORTED in data object
-      if (data && data.error_code === 'ALREADY_SUPPORTED') {
+      // SLB-FIX-L11: normalize to the RPC contract {success, error_code} — every
+      // already-supported shape maps to status ALREADY_SUPPORTED with 0 points.
+      const alreadySupported =
+        (data && data.error_code === 'ALREADY_SUPPORTED') ||
+        data?.already_supported === true ||
+        data?.status === 'ALREADY_SUPPORTED';
+      if (alreadySupported) {
         return {
           success: true,
           data: {
@@ -939,10 +964,10 @@ export const supportApi = {
 
       const result: SupportVerificationResult = {
         success: data?.success ?? true,
-        status: data?.status || (data?.already_supported ? 'ALREADY_SUPPORTED' : 'RECORDED'),
+        status: data?.status || 'RECORDED',
         linkId,
         supportRecordId: data?.support_id || data?.support_record_id,
-        pointsAwarded: data?.points_awarded || (data?.success ? 1 : 0),
+        pointsAwarded: data?.points_awarded ?? (data?.success ? 1 : 0),
         supportedAt: data?.supported_at,
         code: data?.error_code || data?.code,
       };
@@ -1231,14 +1256,8 @@ export const configApi = {
       const { data, error } = await supabase.rpc('revoke_notice_secure', {
         p_notice_id: noticeId,
       });
-      if (error) {
-        // Fallback to direct update if RPC not yet deployed
-        const { error: updErr } = await supabase
-          .from('notices')
-          .update({ status: 'REVOKED' })
-          .eq('id', noticeId);
-        if (updErr) return { success: false, error: formatSupabaseError(updErr) };
-      }
+      // SLB-FIX-M33: no direct-UPDATE fallback (no UPDATE policy exists) — surface the RPC error
+      if (error) return { success: false, error: formatSupabaseError(error) };
       return { success: true, data };
     } catch (err: any) {
       return { success: false, error: formatSupabaseError(err) };
@@ -1554,15 +1573,16 @@ export const pointsApi = {
   async getLeaderboardRankings(period: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ALL_TIME' = 'WEEKLY', date?: string): Promise<ApiResponse<any[]>> {
     try {
       if (!isSupabaseConfigured) return { success: true, data: [] };
-      const { data, error } = await supabase.rpc('get_daily_leaderboard_secure', {
-        p_period: period,
-        p_date: date || (new Date().toISOString().slice(0, 10)),
-      });
+      // SLB-FIX-M16: omit p_date when not given so the RPC's own BDT default applies
+      // (a UTC date here showed the previous day during 00:00-06:00 BDT).
+      const rpcParams: { p_period: string; p_date?: string } = { p_period: period };
+      if (date) rpcParams.p_date = date;
+      const { data, error } = await supabase.rpc('get_daily_leaderboard_secure', rpcParams);
       if (error) {
         // Fallback: Query safe public columns for active members
         const { data: membersData, error: mErr } = await supabase
           .from('members')
-          .select('id, name, member_number, profile_photo_url, role, status, points, weekly_points, monthly_points, daily_points, total_links_submitted, total_supports_given, total_all_done')
+          .select('id, name, member_number, profile_photo_url, role, status, points, weekly_points, monthly_points, daily_points, total_links_submitted, total_supports_given, total_all_done, current_streak')
           .eq('status', 'ACTIVE')
           .order(period === 'WEEKLY' ? 'weekly_points' : period === 'MONTHLY' ? 'monthly_points' : period === 'DAILY' ? 'daily_points' : 'points', { ascending: false })
           .limit(100);

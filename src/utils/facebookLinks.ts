@@ -14,8 +14,9 @@ export interface FacebookProfileValidationResult {
 export function isValidFacebookUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
-  // Validates facebook.com, fb.watch, fb.com, m.facebook.com
-  const fbRegex = /^(https?:\/\/)?((www|m|mobile|web)\.)?(facebook\.com|fb\.watch|fb\.me|fb\.com)\/.+$/i;
+  // SLB-FIX-M7: aligned to the server regex (submit RPC):
+  // https?://(www.|web.|m.)?(facebook.com|fb.watch)/ — scheme required, fb.me/fb.com rejected
+  const fbRegex = /^https?:\/\/(www\.|web\.|m\.)?(facebook\.com|fb\.watch)\/.+$/i;
   return fbRegex.test(trimmed);
 }
 

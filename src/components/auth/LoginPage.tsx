@@ -74,7 +74,6 @@ export const LoginPage: React.FC = () => {
   const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN'>('LOGIN');
   const [inviteToken, setInviteToken] = useState('');
   const [inviteTokenHash, setInviteTokenHash] = useState('');
-  const [inviteData, setInviteData] = useState<{ member_number?: string; facebook_name?: string } | null>(null);
   const [loginIdentifier, setLoginIdentifier] = useState(''); // Used for Email or Member ID
   const [email, setEmail] = useState(''); // Used for Registration
   const [password, setPassword] = useState('');
@@ -112,7 +111,6 @@ export const LoginPage: React.FC = () => {
     setPassword('');
     setConfirmPassword('');
     setInviteToken('');
-    setInviteData(null);
   };
 
     const handleVerifyInvite = async () => {
@@ -570,7 +568,8 @@ export const LoginPage: React.FC = () => {
               {/* Admin Invite Fields */}
               {mode === 'INVITE_TOKEN' && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  {!inviteData ? (
+                  {/* SLB-FIX-M4: dead inviteData password stage removed (setInviteData was only ever called with null) */}
+                  {
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
                         Invite Token *
@@ -584,42 +583,7 @@ export const LoginPage: React.FC = () => {
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
                       />
                     </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="p-3.5 bg-slate-900/50 rounded-xl border border-slate-800">
-                        <p className="text-xs text-slate-400 mb-1">একাউন্ট নিশ্চিত করা হয়েছে:</p>
-                        <p className="text-sm text-white font-bold">{inviteData.member_number}</p>
-                        <p className="text-xs text-slate-300">{inviteData.facebook_name}</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
-                          New Password *
-                        </label>
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          required
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="কমপক্ষে ৬ অক্ষর"
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 transition"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
-                          Confirm Password *
-                        </label>
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          required
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          placeholder="পুনরায় পাসওয়ার্ড দিন"
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 transition"
-                        />
-                      </div>
-                    </div>
-                  )}
+                  }
                 </div>
               )}
 
@@ -736,7 +700,7 @@ export const LoginPage: React.FC = () => {
                 ) : mode === 'REGISTER' ? (
                   'অ্যাকাউন্ট রেজিস্টার করুন'
                 ) : mode === 'INVITE_TOKEN' ? (
-                  !inviteData ? 'টোকেন ভেরিফাই করুন' : 'পাসওয়ার্ড সেট করুন'
+                  'টোকেন ভেরিফাই করুন'
                 ) : (
                   'রিসেট লিংক পাঠান'
                 )}

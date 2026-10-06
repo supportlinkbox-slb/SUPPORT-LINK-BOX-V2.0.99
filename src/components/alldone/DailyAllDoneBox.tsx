@@ -5,7 +5,7 @@ import { formatToBDT } from '../../utils/bangladeshTime';
 import { AllDoneRecord } from '../../types';
 
 export const DailyAllDoneBox: React.FC = () => {
-  const { allDoneRecords, todayDate, currentUser, confirmFakeAllDone, addAuditLog } = useApp();
+  const { allDoneRecords, todayDate, currentUser, confirmFakeAllDone } = useApp(); // SLB-FIX-L19: addAuditLog was unused
   const [selectedRecordForReview, setSelectedRecordForReview] = useState<AllDoneRecord | null>(null);
   const [reviewReason, setReviewReason] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);

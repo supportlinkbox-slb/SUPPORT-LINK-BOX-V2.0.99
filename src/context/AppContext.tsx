@@ -300,6 +300,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Core State
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
   const isRegisteringRef = useRef<boolean>(false);
+  const isSubmittingAllDoneRef = useRef<boolean>(false); // SLB-FIX-M19: in-flight All Done guard
   const [members, setMembers] = useState<MemberProfile[]>(() => {
     if (isSupabaseConfigured) return [];
     return safeJsonParse('slb_members', SEED_MEMBERS);
@@ -1344,7 +1345,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const link = dailyLinks.find((l) => l.id === linkId);
     if (!link) return { success: false, error: 'Link not found' };
     const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'DEVELOPER';
-    if (!isAdmin && !canEditSubmission(link.can_edit_until)) {
+    if (!isAdmin && !canEditSubmission(link.can_edit_until, link.submitted_at)) {
       return { success: false, error: '২ মিনিটের এডিট উইন্ডো শেষ হয়ে গেছে।' };
     }
 
@@ -1370,7 +1371,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const link = dailyLinks.find((l) => l.id === linkId);
     if (!link) return { success: false, error: 'Link not found' };
     const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'DEVELOPER';
-    if (!isAdmin && !canEditSubmission(link.can_edit_until)) {
+    if (!isAdmin && !canEditSubmission(link.can_edit_until, link.submitted_at)) {
       return { success: false, error: '২ মিনিটের ডিলিট উইন্ডো শেষ হয়ে গেছে।' };
     }
 
@@ -1647,19 +1648,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setScheduledLinks((prev) =>
         prev.map((s) =>
           s.id === schedule.id
-            ? { ...s, status: 'executed', is_published: true, published_link_id: newLink.id, executed_at: nowIso }
+            ? { ...s, status: 'published', is_published: true, published_link_id: newLink.id, executed_at: nowIso } // SLB-FIX-L21
             : s
         )
       );
 
-      // Points
+      // SLB-FIX-L21: local/demo path mirrors server semantics — the server awards
+      // points_daily_link_submit (default 5), not a hardcoded 7, and writes status 'published'.
+      const localLinkPoints = systemConfig.points_daily_link_submit ?? 5;
       setMembers((prev) =>
         prev.map((m) =>
           m.id === owner.id
             ? {
                 ...m,
-                points: m.points + 7,
-                weekly_points: m.weekly_points + 7,
+                points: m.points + localLinkPoints,
+                weekly_points: m.weekly_points + localLinkPoints,
                 total_links_submitted: m.total_links_submitted + 1,
               }
             : m
@@ -1741,7 +1744,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id: `pt-${Date.now()}-supp`,
       member_id: currentUser.id,
       activity_type: 'SUPPORT_COMPLETE',
-      points: 1,
+      points: systemConfig.points_per_support ?? 1, // SLB-FIX-L13: was hardcoded 1 (offline/demo path)
       date: todayDate,
       reference_id: link.id,
       description: `Supported link #${link.serial_display}`,
@@ -1825,10 +1828,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     if (isSupabaseConfigured) {
-      const res = await allDoneApi.submitAllDone({
-        alternative_id_used: Boolean(alternativeDetails?.account_name),
-        alternative_id_details: alternativeDetails,
-      });
+      // SLB-FIX-M19: in-flight guard — a double-tap must not fire two RPCs.
+      // (Raw 23505 from the unique backstop is mapped to Bengali in bengaliErrors.ts.)
+      if (isSubmittingAllDoneRef.current) {
+        return { success: false, error: 'All Done ইতিমধ্যে সাবমিট হচ্ছে। অনুগ্রহ করে অপেক্ষা করুন।' };
+      }
+      isSubmittingAllDoneRef.current = true;
+      let res: Awaited<ReturnType<typeof allDoneApi.submitAllDone>>;
+      try {
+        res = await allDoneApi.submitAllDone({
+          alternative_id_used: Boolean(alternativeDetails?.account_name),
+          alternative_id_details: alternativeDetails,
+        });
+      } finally {
+        isSubmittingAllDoneRef.current = false;
+      }
       if (!res.success) {
         // Map server error codes to Bengali
         const mappedError = getBengaliSupportErrorMessage(res.error);
@@ -2131,7 +2145,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Local Preview Mode Fallback
     const targetMember = members.find((m) => m.id === params.memberId);
-    if (params.type === 'KICKOUT_NOTICE' && targetMember?.status !== 'REMOVED' && targetMember?.status !== 'BANNED') {
+    if (params.type === 'KICKOUT_WARNING' && targetMember?.status !== 'REMOVED' && targetMember?.status !== 'BANNED') { // SLB-FIX-M31
       return { success: false, error: 'KICKOUT_NOTICE_NOT_ALLOWED: Member is still active' };
     }
 
@@ -2155,7 +2169,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       member_id: params.memberId,
       title: params.title,
       message: params.content,
-      type: params.type === 'ALERT_WARNING' || params.type === 'KICKOUT_NOTICE' ? 'WARNING' : 'NOTICE',
+      type: params.type === 'ALERT_WARNING' || params.type === 'KICKOUT_WARNING' ? 'WARNING' : 'NOTICE', // SLB-FIX-M31
       reference_id: newNotice.id,
       is_read: false,
       created_at: new Date().toISOString(),
@@ -2205,7 +2219,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         skippedCount++;
         continue;
       }
-      if (params.type === 'KICKOUT_NOTICE' && member.status !== 'REMOVED' && member.status !== 'BANNED') {
+      if (params.type === 'KICKOUT_WARNING' && member.status !== 'REMOVED' && member.status !== 'BANNED') { // SLB-FIX-M31
         skippedCount++;
         continue;
       }
@@ -2236,7 +2250,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         member_id: memId,
         title: params.title,
         message: renderedContent,
-        type: params.type === 'ALERT_WARNING' || params.type === 'KICKOUT_NOTICE' ? 'WARNING' : 'NOTICE',
+        type: params.type === 'ALERT_WARNING' || params.type === 'KICKOUT_WARNING' ? 'WARNING' : 'NOTICE', // SLB-FIX-M31
         reference_id: nId,
         is_read: false,
         created_at: new Date().toISOString(),

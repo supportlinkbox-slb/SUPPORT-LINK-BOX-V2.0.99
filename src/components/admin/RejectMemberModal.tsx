@@ -35,6 +35,9 @@ export const RejectMemberModal: React.FC<RejectMemberModalProps> = ({
 
   if (!member) return null;
 
+  // SLB-FIX-L26: confirm stays disabled until a reason code or custom text is present
+  const canConfirmReject = useCustom ? customReason.trim().length > 0 : !!selectedReason;
+
   const handleReject = async () => {
     if (!useCustom && !selectedReason) { setError('একটি কারণ সিলেক্ট করুন বা কাস্টম কারণ লিখুন।'); return; }
     if (useCustom && !customReason.trim()) { setError('কাস্টম কারণ লিখুন।'); return; }
@@ -119,7 +122,7 @@ export const RejectMemberModal: React.FC<RejectMemberModalProps> = ({
               </button>
               <div className="flex gap-2">
                 <button onClick={onClose} disabled={isProcessing} className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">বাতিল</button>
-                <button onClick={handleReject} disabled={isProcessing}
+                <button onClick={handleReject} disabled={isProcessing || !canConfirmReject}
                   className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50">
                   {isProcessing && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Reject করুন
                 </button>

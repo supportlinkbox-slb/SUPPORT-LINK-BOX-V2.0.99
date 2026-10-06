@@ -4,7 +4,7 @@ import { Navbar } from './components/layout/Navbar';
 import { HomeDashboardView } from './components/member/HomeDashboardView';
 import { PlaylistSupportSession } from './components/member/PlaylistSupportSession';
 import { AllDoneSection } from './components/alldone/AllDoneSection';
-import { SpecialSupportDutyBanner } from './components/member/SpecialSupportDutyBanner';
+import { PenaltyDutyBanner } from './components/member/PenaltyDutyBanner'; // SLB-FIX-L14
 import { LoginPage } from './components/auth/LoginPage';
 import { StatusGateScreen } from './components/auth/StatusGateScreen';
 import { BottomNavBar } from './components/layout/BottomNavBar';
@@ -70,7 +70,7 @@ function MainContent() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 md:pb-8">
         {/* Active Special Support Duty Warning (if penalized) */}
-        <SpecialSupportDutyBanner onGoToSupport={() => setCurrentTab('support')} />
+        <PenaltyDutyBanner onGoToSupport={() => setCurrentTab('support')} />
 
         {/* Tab Routing */}
         {(currentTab === 'home' || currentTab === 'links') && (

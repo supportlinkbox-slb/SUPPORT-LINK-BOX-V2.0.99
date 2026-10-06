@@ -257,7 +257,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({
           {filteredLinks.map((link, idx) => {
             const isSupported = isLinkSupported(link.id);
             const isOwnLink = link.owner_id === currentUser?.id;
-            const canEdit = isAdmin || (isOwnLink && canEditSubmission(link.can_edit_until || link.submitted_at));
+            const canEdit = isAdmin || (isOwnLink && canEditSubmission(link.can_edit_until, link.submitted_at)); // SLB-FIX-M6
             const shouldShowAdAfter = (idx + 1) % 8 === 0;
 
             return (

@@ -27,6 +27,7 @@ export interface MemberProfile {
   monthly_points?: number;
   fast_support_days?: number;
   link_submit_days?: number;
+  current_streak?: number; // SLB-FIX-L16: streak badge source (streak_days exists in no schema)
   total_links_submitted: number;
   total_supports_given: number;
   total_all_done: number;
@@ -90,7 +91,9 @@ export type ScheduleStatus =
   | 'pending'
   | 'processing'
   | 'executed'
+  | 'published' // SLB-FIX-M24: server writes 'published' on execution
   | 'canceled'
+  | 'cancelled' // SLB-FIX-M24: server writes 'cancelled' (double-l) on cancel
   | 'failed'
   | 'skipped';
 
@@ -174,7 +177,7 @@ export interface AllDoneRecord {
   base_points: number; // 3
   bonus_points: number; // 10, 8, 6, 4, 2, or 0
   total_points: number;
-  status: 'VERIFIED' | 'REVOKED' | 'UNDER_REVIEW';
+  status: 'VERIFIED' | 'REVOKED'; // SLB-FIX-L19: UNDER_REVIEW never set anywhere
   alternative_id_used?: boolean;
   alternative_id_details?: {
     account_name: string;
@@ -299,11 +302,11 @@ export interface ReportMessage {
   created_at: string;
 }
 
+// SLB-FIX-M31: single kickout value 'KICKOUT_WARNING' (matches chapter-14 RPC guards)
 export type NoticeType =
   | 'SIMPLE_WARNING'
   | 'ALERT_WARNING'
   | 'KICKOUT_WARNING'
-  | 'KICKOUT_NOTICE'
   | 'GENERAL_ANNOUNCEMENT';
 
 export interface NoticeItem {

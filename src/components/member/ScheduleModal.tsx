@@ -288,10 +288,13 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
                 <input
                   type="date"
                   value={targetDate}
-                  disabled={!isAdmin && Boolean(editingScheduleId)}
+                  disabled={Boolean(editingScheduleId)}
                   onChange={(e) => setTargetDate(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 disabled:opacity-50"
                 />
+                {editingScheduleId ? (
+                  <p className="text-[10px] text-slate-500 mt-1">SLB-FIX-M28: এডিটে তারিখ পরিবর্তন সংরক্ষণ হয় না (edit RPC-তে date প্যারামিটার নেই)।</p>
+                ) : null}
               </div>
 
               <div>
@@ -439,7 +442,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose })
                         </span>
                         <span
                           className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                            s.status === 'executed'
+                            s.status === 'executed' || s.status === 'published' // SLB-FIX-M24
                               ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                               : s.status === 'pending'
                               ? 'bg-amber-950 text-amber-400 border border-amber-800'
