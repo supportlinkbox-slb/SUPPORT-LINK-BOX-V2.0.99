@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// L1: normalize fb_link — trim + strip trailing slashes, so
+// "https://facebook.com/x/" and "https://facebook.com/x" match.
+function normalizeFbLink(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().replace(/\/+$/, '');
+  return s ? s : null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -38,15 +46,72 @@ serve(async (req) => {
     }
 
     const { member_id, email, fb_link, reason } = await req.json();
-    if (!email) throw new Error('email required');
+
+    // L1: normalize BEFORE insert and BEFORE any check.
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    const normalizedFbLink = normalizeFbLink(fb_link);
+
+    if (!normalizedEmail) throw new Error('email required');
     if (!reason) throw new Error('reason required');
 
-    // Add to blacklist (upsert on email)
+    // H23 (email path): never blacklist the DEVELOPER account or yourself,
+    // even when no member_id is passed.
+    const { data: emailOwner } = await supabaseAdmin
+      .from('members')
+      .select('id, role')
+      .ilike('email', normalizedEmail)
+      .maybeSingle();
+    if (emailOwner && emailOwner.role === 'DEVELOPER') {
+      throw new Error('ডেভেলপার অ্যাকাউন্ট ব্ল্যাকলিস্ট করা যাবে না।');
+    }
+    if (emailOwner && emailOwner.id === caller.id) {
+      throw new Error('নিজের অ্যাকাউন্ট ব্ল্যাকলিস্ট করা যাবে না।');
+    }
+
+    // C13: idempotent — already blacklisted (and no member action requested)
+    // returns success instead of erroring.
+    const { data: alreadyBl } = await supabaseAdmin
+      .from('blacklist')
+      .select('id')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+    if (alreadyBl && !member_id) {
+      return new Response(JSON.stringify({ success: true, already_blacklisted: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // H23 target resolution happens BEFORE any write: fetch the member (if any)
+    // and refuse DEVELOPER targets and self-targets up front.
+    let targetMember: { id: string; role: string; auth_user_id: string | null } | null = null;
+    if (member_id) {
+      const { data: member } = await supabaseAdmin
+        .from('members')
+        .select('id, role, auth_user_id')
+        .eq('id', member_id)
+        .single();
+      targetMember = member ?? null;
+
+      if (targetMember) {
+        // H23 (member path): refuse DEVELOPER targets and self-targets.
+        if (targetMember.role === 'DEVELOPER') {
+          throw new Error('ডেভেলপার অ্যাকাউন্ট ব্ল্যাকলিস্ট করা যাবে না।');
+        }
+        if (targetMember.id === caller.id) {
+          throw new Error('নিজের অ্যাকাউন্ট ব্ল্যাকলিস্ট করা যাবে না।');
+        }
+      }
+    }
+
+    // Add to blacklist (upsert on email).
+    // C13: onConflict:'email' matches the REAL unique constraint on the
+    // plain email column (added by the SQL migration) — the old expression
+    // index made this throw on re-blacklist.
     const { error: blError } = await supabaseAdmin
       .from('blacklist')
       .upsert({
-        email: email.toLowerCase().trim(),
-        fb_link: fb_link?.trim() || null,
+        email: normalizedEmail,
+        fb_link: normalizedFbLink,
         reason,
         blacklisted_by: caller.id,
         blacklisted_by_name: caller.name,
@@ -54,24 +119,16 @@ serve(async (req) => {
     if (blError) throw blError;
 
     // If member_id provided, mark member as blacklisted + delete auth account
-    if (member_id) {
-      const { data: member } = await supabaseAdmin
+    if (targetMember) {
+      // Update member status
+      await supabaseAdmin
         .from('members')
-        .select('id, auth_user_id')
-        .eq('id', member_id)
-        .single();
+        .update({ status: 'REMOVED' })
+        .eq('id', member_id);
 
-      if (member) {
-        // Update member status
-        await supabaseAdmin
-          .from('members')
-          .update({ status: 'REMOVED' })
-          .eq('id', member_id);
-
-        // Delete auth account so they can't login
-        if (member.auth_user_id) {
-          await supabaseAdmin.auth.admin.deleteUser(member.auth_user_id);
-        }
+      // Delete auth account so they can't login
+      if (targetMember.auth_user_id) {
+        await supabaseAdmin.auth.admin.deleteUser(targetMember.auth_user_id);
       }
     }
 
@@ -83,7 +140,7 @@ serve(async (req) => {
       action: 'MEMBER_BLACKLISTED',
       target_type: 'member',
       target_member_id: member_id || null,
-      details: `Blacklisted: ${email}${fb_link ? ' + FB link' : ''} — ${reason}`,
+      details: `Blacklisted: ${normalizedEmail}${normalizedFbLink ? ' + FB link' : ''} — ${reason}`,
     });
 
     return new Response(JSON.stringify({ success: true }), {

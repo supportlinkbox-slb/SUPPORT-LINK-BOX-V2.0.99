@@ -14,7 +14,7 @@ const REASONS: Record<string, { bn: string; en: string }> = {
   },
   PHOTO_MISMATCH: {
     bn: 'আপনার ফেসবুক প্রোফাইলের ছবি এবং রেজিস্ট্রেশনের সময় দেওয়া ছবি মিলছে না।',
-    en: 'Your Facebook profile photo does not match the photo provided during registration.',
+    en: 'The Facebook profile photo does not match the photo provided during registration.',
   },
   INVALID_FB_LINK: {
     bn: 'আপনার দেওয়া ফেসবুক প্রোফাইল লিংকটি সঠিক নয়।',
@@ -90,13 +90,21 @@ serve(async (req) => {
     const reason = REASONS[reason_code];
     if (!reason && !custom_reason) throw new Error('Reason required');
 
-    // Get member
+    // Get member (H22: status + role needed for guards)
     const { data: member, error: memberError } = await supabaseAdmin
       .from('members')
-      .select('id, email, name')
+      .select('id, email, name, status, role')
       .eq('id', member_id)
       .single();
     if (memberError || !member) throw new Error('MEMBER_NOT_FOUND');
+
+    // H22(a): only PENDING requests may be rejected; never the DEVELOPER account.
+    if (member.role === 'DEVELOPER') {
+      throw new Error('ডেভেলপার অ্যাকাউন্ট রিজেক্ট করা যাবে না।');
+    }
+    if (member.status !== 'PENDING') {
+      throw new Error('শুধুমাত্র PENDING রিকোয়েস্ট রিজেক্ট করা যায়।');
+    }
 
     // Update status to REJECTED
     const { error: updateError } = await supabaseAdmin
@@ -105,28 +113,37 @@ serve(async (req) => {
       .eq('id', member_id);
     if (updateError) throw updateError;
 
-    // Send email via Brevo
-    const reasonBn = reason ? reason.bn : '';
-    const reasonEn = reason ? reason.en : '';
-    const emailHtml = buildEmail(member.name || 'সদস্য', reasonBn, reasonEn, custom_reason || '');
+    // Send email via Brevo — H22(b): NON-THROWING.
+    // The status change above is never rolled back on email failure;
+    // the outcome is reported via rejection_email_sent instead.
+    let rejectionEmailSent = false;
+    try {
+      const reasonBn = reason ? reason.bn : '';
+      const reasonEn = reason ? reason.en : '';
+      const emailHtml = buildEmail(member.name || 'সদস্য', reasonBn, reasonEn, custom_reason || '');
 
-    const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': brevoApiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        sender: { name: 'Support Link Box', email: 'slb@supportlinkbox.com' },
-        to: [{ email: member.email, name: member.name }],
-        subject: 'রেজিস্ট্রেশন রিভিউ | Registration Review — Support Link Box',
-        htmlContent: emailHtml,
-      }),
-    });
+      const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: 'Support Link Box', email: 'slb@supportlinkbox.com' },
+          to: [{ email: member.email, name: member.name }],
+          subject: 'রেজিস্ট্রেশন রিভিউ | Registration Review — Support Link Box',
+          htmlContent: emailHtml,
+        }),
+      });
 
-    if (!brevoRes.ok) {
-      const errText = await brevoRes.text();
-      throw new Error('Email send failed: ' + errText.slice(0, 200));
+      if (!brevoRes.ok) {
+        const errText = await brevoRes.text();
+        console.error('Rejection email failed:', errText.slice(0, 200));
+      } else {
+        rejectionEmailSent = true;
+      }
+    } catch (emailErr: any) {
+      console.error('Rejection email threw:', emailErr?.message || emailErr);
     }
 
     // Audit log
@@ -137,10 +154,10 @@ serve(async (req) => {
       action: 'MEMBER_REJECTED',
       target_type: 'member',
       target_member_id: member.id,
-      details: `Rejected: ${reason_code || 'CUSTOM'}${custom_reason ? ' + custom note' : ''}`,
+      details: `Rejected: ${reason_code || 'CUSTOM'}${custom_reason ? ' + custom note' : ''} — email_sent: ${rejectionEmailSent}`,
     });
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, email_sent: rejectionEmailSent }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {

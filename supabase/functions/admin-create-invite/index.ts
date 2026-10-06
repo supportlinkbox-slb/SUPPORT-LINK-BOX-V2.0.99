@@ -6,6 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// L1: normalize fb_link — trim + strip trailing slashes, so
+// "https://facebook.com/x/" and "https://facebook.com/x" are the same identity
+// in duplicate checks, blacklist checks, and on write.
+function normalizeFbLink(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().replace(/\/+$/, '');
+  return s ? s : null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -40,14 +49,19 @@ serve(async (req) => {
 
     const { email, facebookUrl, facebookName, profilePhotoUrl, facebookIdentityKey, facebookIdentityType, expiresInHours = 48 } = await req.json();
 
-    if (!email || !facebookIdentityKey) {
+    // L1: normalize email (lowercase + trim) and fb_link BEFORE every
+    // check and on every write — kills casing/trailing-slash bypasses.
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    const normalizedFbUrl = normalizeFbLink(facebookUrl);
+
+    if (!normalizedEmail || !facebookIdentityKey) {
       throw new Error('Missing required fields');
     }
 
-    // 0. BLACKLIST CHECK — permanent ban on email + FB link
+    // 0. BLACKLIST CHECK — permanent ban on email + FB link (normalized)
     const { data: isBl } = await supabaseAdmin.rpc('is_blacklisted', {
-      p_email: email,
-      p_fb_link: facebookUrl || null,
+      p_email: normalizedEmail,
+      p_fb_link: normalizedFbUrl,
     });
     if (isBl === true) throw new Error('BLACKLISTED');
 
@@ -67,7 +81,7 @@ serve(async (req) => {
     const { data: existingEmail } = await supabaseAdmin
       .from('members')
       .select('id, status')
-      .ilike('email', email)
+      .ilike('email', normalizedEmail)
       .maybeSingle();
 
     if (existingEmail && existingEmail.status !== 'REJECTED') throw new Error('DUPLICATE_EMAIL');
@@ -88,8 +102,8 @@ serve(async (req) => {
           name: facebookName,
           facebook_name: facebookName,
           facebook_name_original: facebookName,
-          facebook_url: facebookUrl,
-          facebook_profile_url: facebookUrl,
+          facebook_url: normalizedFbUrl,
+          facebook_profile_url: normalizedFbUrl,
           facebook_identity_key: facebookIdentityKey,
           facebook_identity_type: facebookIdentityType,
           profile_photo_url: profilePhotoUrl,
@@ -114,7 +128,7 @@ serve(async (req) => {
       // For safety, try deleting any auth user with this email
       try {
         const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-        const oldAuth = users?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+        const oldAuth = users?.users?.find((u) => u.email?.toLowerCase() === normalizedEmail);
         if (oldAuth) await supabaseAdmin.auth.admin.deleteUser(oldAuth.id);
       } catch { /* best effort */ }
     } else {
@@ -123,18 +137,18 @@ serve(async (req) => {
       if (seqError) throw new Error('Error generating member number');
       memberNumber = mn;
 
-      // 3. Create Member Profile (PENDING)
+      // 3. Create Member Profile (PENDING) — L1: normalized email + fb link on write
       const { data: newMember, error: memberError } = await supabaseAdmin
         .from('members')
         .insert({
           member_number: memberNumber,
-          email: email,
+          email: normalizedEmail,
           name: facebookName,
-          username: email.split('@')[0] + '_' + Math.random().toString(36).substring(2, 6),
+          username: normalizedEmail.split('@')[0] + '_' + Math.random().toString(36).substring(2, 6),
           facebook_name: facebookName,
           facebook_name_original: facebookName,
-          facebook_url: facebookUrl,
-          facebook_profile_url: facebookUrl,
+          facebook_url: normalizedFbUrl,
+          facebook_profile_url: normalizedFbUrl,
           facebook_identity_key: facebookIdentityKey,
           facebook_identity_type: facebookIdentityType,
           profile_photo_url: profilePhotoUrl,
@@ -184,7 +198,7 @@ serve(async (req) => {
       action: isRevive ? 'INVITE_RECREATED_REJECTED' : 'INVITE_CREATED',
       target_type: 'member',
       target_member_id: memberId,
-      details: (isRevive ? 'Revived REJECTED member with new invite for ' : 'Created secure invite token for ') + email
+      details: (isRevive ? 'Revived REJECTED member with new invite for ' : 'Created secure invite token for ') + normalizedEmail
     });
 
     return new Response(JSON.stringify({ success: true, rawToken, memberNumber, revived: isRevive }), {

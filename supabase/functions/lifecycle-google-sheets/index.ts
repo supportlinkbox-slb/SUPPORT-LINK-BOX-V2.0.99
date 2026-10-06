@@ -1,5 +1,5 @@
 // ============================================================================
-// lifecycle-google-sheets — weekly Google Sheets archive (v2, rebuilt)
+// lifecycle-google-sheets — weekly Google Sheets archive (v2, rebuilt + C8 fix)
 // Policy (owner-approved):
 //   BACKUP to Sheets, NEVER deleted : daily_links, all_done, point_transactions
 //   BACKUP + DELETE after VERIFIED    : support_records only (heavy raw table)
@@ -8,11 +8,24 @@
 //   batch's cutoff (backup-only tables are never deleted, so without this
 //   they would be re-exported every week).
 // Designed against the ACTUAL live schema (v18 + RECONCILE_SCHEMA_V18).
+//
+// C8 SECURITY FIXES (2026-10-06):
+//   (a) ADMIN/DEVELOPER + ACTIVE gate: the caller's JWT is resolved via
+//       auth.getUser and the members table (service_role) before ANY work.
+//       Non-admin callers get {success:false, error:'Unauthorized'} (401)
+//       with no data disclosure. The service_role key itself is also honored
+//       so the scheduled pg_cron job (no user JWT) keeps working — anyone
+//       holding that key already has full DB access, so no extra privilege.
+//   (b) cutoff_date is clamped to <= now(); future dates are rejected (400).
+//   (c) execute_cleanup additionally requires body.human_verified === true
+//       AND the latest archive_batches row for the cutoff to be VERIFIED
+//       (re-read from the table here — the request is never trusted).
 // ============================================================================
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const GOOGLE_CLIENT_EMAIL = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL")!;
 const GOOGLE_PRIVATE_KEY = (Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") || "").replace(/\\n/g, "\n");
 const SPREADSHEET_ID = Deno.env.get("GOOGLE_SHEETS_SPREADSHEET_ID")!;
@@ -173,15 +186,61 @@ async function fetchEligible(
 // --- Main handler -----------------------------------------------------------
 Deno.serve(async (req) => {
   let batchRecordId: string | null = null;
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+
   try {
     if (req.method !== "POST") {
-      return new Response(JSON.stringify({ error: "POST method required" }), { status: 405 });
+      return json({ ok: false, error: "POST method required" }, 405);
+    }
+
+    // --- C8(a): ADMIN / DEVELOPER + ACTIVE gate ---------------------------
+    // The service_role bearer itself is honored so the scheduled pg_cron job
+    // (which calls with the service_role key, no user JWT) keeps working.
+    // Holding that key already means full DB access, so this grants nothing
+    // extra. Every other caller must present a user JWT belonging to an
+    // ACTIVE ADMIN or DEVELOPER member — otherwise 401 with no disclosure.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+    const isServiceRoleCall = !!bearerToken && bearerToken === SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!isServiceRoleCall) {
+      const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData, error: userError } = await supabaseAnon.auth.getUser();
+      if (userError || !userData?.user) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      const { data: caller } = await supabase
+        .from("members")
+        .select("role, status")
+        .eq("auth_user_id", userData.user.id)
+        .maybeSingle();
+      const roleOk = !!caller && (caller.role === "ADMIN" || caller.role === "DEVELOPER");
+      if (!roleOk || caller!.status !== "ACTIVE") {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
     }
 
     const body = await req.json().catch(() => ({}));
     const cutoffDate =
       body.cutoff_date || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // --- C8(b): clamp cutoff_date to <= now ---------------------------------
+    const cutoffMs = Date.parse(cutoffDate);
+    if (Number.isNaN(cutoffMs)) {
+      return json({ ok: false, error: "cutoff_date সঠিক তারিখ নয়।" }, 400);
+    }
+    if (cutoffMs > Date.now()) {
+      return json({ ok: false, error: "cutoff_date ভবিষ্যতের তারিখ হতে পারবে না।" }, 400);
+    }
+
     const executeCleanup = body.execute_cleanup === true;
+    const humanVerified = body.human_verified === true;
 
     // Duplicate-safe lower bound: continue where the last successful batch stopped.
     const { data: lastOk } = await supabase
@@ -242,29 +301,55 @@ Deno.serve(async (req) => {
       })
       .eq("id", batchRecordId);
 
+    // --- C8(c): human-verification gate for cleanup -------------------------
+    // Cleanup runs ONLY when: execute_cleanup === true AND the caller
+    // explicitly confirmed human_verified === true AND the latest batch row
+    // for this cutoff is VERIFIED in the table (re-read here — the request
+    // body is never trusted for this). Otherwise nothing is deleted and the
+    // response says so explicitly.
     let cleanupSummary: unknown = null;
+    let cleanupDone = false;
+    let cleanupBlocked: string | null = null;
     if (executeCleanup) {
-      // Deletes ONLY support_records, and ONLY because the batch is VERIFIED
-      // (enforced again inside the RPC).
-      const { data: cleanRes, error: cleanErr } = await supabase.rpc(
-        "cleanup_archived_lifecycle_data",
-        { p_batch_id: batchRecordId, p_cutoff_date: cutoffDate }
-      );
-      if (cleanErr) throw new Error(`Cleanup RPC failed: ${cleanErr.message}`);
-      cleanupSummary = cleanRes;
+      if (!humanVerified) {
+        cleanupBlocked = "human_verified=true পাওয়া যায়নি — কিছু ডিলিট করা হয়নি।";
+      } else {
+        const { data: latestBatch } = await supabase
+          .from("archive_batches")
+          .select("id, status")
+          .eq("cutoff_date", cutoffDate)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!latestBatch || latestBatch.status !== "VERIFIED") {
+          cleanupBlocked = "এই cutoff-এর সর্বশেষ batch VERIFIED নয় — কিছু ডিলিট করা হয়নি।";
+        } else {
+          // Deletes ONLY support_records, and ONLY because the batch is VERIFIED
+          // (enforced again inside the RPC).
+          const { data: cleanRes, error: cleanErr } = await supabase.rpc(
+            "cleanup_archived_lifecycle_data",
+            { p_batch_id: batchRecordId, p_cutoff_date: cutoffDate }
+          );
+          if (cleanErr) throw new Error(`Cleanup RPC failed: ${cleanErr.message}`);
+          cleanupSummary = cleanRes;
+          cleanupDone = true;
+        }
+      }
     }
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        batch_id: batchRecordId,
-        status: executeCleanup ? "CLEANED" : "VERIFIED_NOT_DELETED",
-        cleanup_policy: "support_records only; daily_links/all_done/point_transactions are backup-only",
-        exported,
-        cleanup: cleanupSummary,
-      }),
-      { headers: { "Content-Type": "application/json" } }
-    );
+    return json({
+      ok: true,
+      batch_id: batchRecordId,
+      status: executeCleanup
+        ? cleanupDone
+          ? "CLEANED"
+          : "VERIFIED_CLEANUP_BLOCKED"
+        : "VERIFIED_NOT_DELETED",
+      cleanup_policy: "support_records only; daily_links/all_done/point_transactions are backup-only",
+      exported,
+      cleanup: cleanupSummary,
+      ...(cleanupBlocked ? { cleanup_blocked_reason: cleanupBlocked } : {}),
+    });
   } catch (err) {
     if (batchRecordId) {
       await supabase
@@ -276,9 +361,6 @@ Deno.serve(async (req) => {
         })
         .eq("id", batchRecordId);
     }
-    return new Response(JSON.stringify({ ok: false, error: (err as Error).message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ ok: false, error: (err as Error).message }, 500);
   }
 });

@@ -87,6 +87,7 @@ serve(async (req) => {
       // 4. Server-side Record Login Failure
       await supabaseAdmin.rpc('record_login_failure', { p_email: email });
 
+      // Generic message kept unchanged — no account/status enumeration here.
       let errorMsg = 'ভুল Email/Member ID অথবা Password।';
       if (authError?.message?.includes('Admin Approval') || authError?.message?.includes('অপেক্ষায়')) {
         errorMsg = authError.message;
@@ -100,6 +101,29 @@ serve(async (req) => {
 
     // 5. Server-side Reset Login Attempt Counter on Successful Password Verification
     await supabaseAdmin.rpc('reset_login_attempts', { p_email: email });
+
+    // 5b. Member-status gate (H1) — never issue a session to a non-ACTIVE member.
+    // Checked AFTER password verification so wrong-password probes cannot
+    // enumerate member statuses (the generic message above is unchanged).
+    // PENDING  -> pending-approval message (no session).
+    // REJECTED / SUSPENDED / FROZEN / anything else -> blocked message (no session).
+    // Only ACTIVE proceeds to step 6.
+    const { data: memberRow } = await supabaseAdmin
+      .from('members')
+      .select('status')
+      .ilike('email', email)
+      .maybeSingle();
+
+    const memberStatus = memberRow?.status ?? null;
+    if (memberStatus !== 'ACTIVE') {
+      const statusMsg = memberStatus === 'PENDING'
+        ? 'আপনার রেজিস্ট্রেশন এখনো অ্যাডমিন এপ্রুভালের অপেক্ষায় আছে। অনুমোদনের পর লগইন করতে পারবেন।'
+        : 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে। সহায়তার জন্য সাপোর্টে যোগাযোগ করুন।';
+      return new Response(
+        JSON.stringify({ success: false, error: statusMsg }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
 
     // 6. Return Session Tokens securely
     return new Response(
