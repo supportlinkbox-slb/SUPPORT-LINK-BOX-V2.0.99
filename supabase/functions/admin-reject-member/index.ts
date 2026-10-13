@@ -50,6 +50,23 @@ Support Link Box — প্রতিদিন সাপোর্ট, প্র�
 </body></html>`;
 }
 
+// P0 fix 2026-10-09: plain-text alternative + List-Unsubscribe improve
+// deliverability (Gmail flagged the HTML-only version as spam-like).
+function buildTextEmail(name: string, reasonBn: string, reasonEn: string, customBn: string): string {
+  const lines = [
+    'SUPPORT LINK BOX — Daily Link Support Community',
+    '',
+    `প্রিয় ${name},`,
+    'আপনার রেজিস্ট্রেশন রিকোয়েস্টটি রিভিউ করা হয়েছে। দুঃখিত, নিম্নলিখিত কারণে এটি অনুমোদন করা যায়নি:',
+    '',
+    `কারণ: ${reasonBn}`,
+    `Reason: ${reasonEn}`,
+  ];
+  if (customBn) lines.push('', `অতিরিক্ত নোট: ${customBn}`);
+  lines.push('', 'সঠিক তথ্য দিয়ে আবার রেজিস্ট্রেশন করতে পারেন.', 'You may register again with correct information.', '', 'Support Link Box — slb@supportlinkbox.com');
+  return lines.join('\n');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -121,6 +138,7 @@ serve(async (req) => {
       const reasonBn = reason ? reason.bn : '';
       const reasonEn = reason ? reason.en : '';
       const emailHtml = buildEmail(member.name || 'সদস্য', reasonBn, reasonEn, custom_reason || '');
+      const emailText = buildTextEmail(member.name || 'সদস্য', reasonBn, reasonEn, custom_reason || '');
 
       const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
@@ -133,6 +151,11 @@ serve(async (req) => {
           to: [{ email: member.email, name: member.name }],
           subject: 'রেজিস্ট্রেশন রিভিউ | Registration Review — Support Link Box',
           htmlContent: emailHtml,
+          textContent: emailText,
+          replyTo: { email: 'slb@supportlinkbox.com', name: 'Support Link Box' },
+          headers: {
+            'List-Unsubscribe': '<mailto:slb@supportlinkbox.com?subject=unsubscribe>',
+          },
         }),
       });
 

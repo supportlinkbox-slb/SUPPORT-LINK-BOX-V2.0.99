@@ -161,6 +161,10 @@ export const AdminDashboard: React.FC = () => {
     try {
       const res = await rejectMember(memberId, reasonCode, customReason);
       if (!res.success) throw new Error(res.error || 'Reject failed');
+      // P0 fix 2026-10-09: never show silent success when the email failed.
+      if ((res as any).emailSent === false) {
+        alert('রিজেক্ট সম্পন্ন, কিন্তু ইমেইল পাঠানো যায়নি। Brevo লগ চেক করুন।');
+      }
       setRejectModalMember(null);
       setIsDetailsOpen(false);
       await refreshData();

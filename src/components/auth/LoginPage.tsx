@@ -274,10 +274,16 @@ export const LoginPage: React.FC = () => {
               initialPhotoUrl = publicUrl;
             }
           } else {
-            console.warn('Avatar upload storage warning:', uploadError);
+            // P0 fix 2026-10-09: surface upload failure instead of silently
+            // falling back to a default avatar.
+            setErrorMsg('ছবি আপলোড করা যায়নি। আবার চেষ্টা করুন।');
+            setLoading(false);
+            return;
           }
         } catch (uploadErr) {
-          console.warn('Avatar upload exception:', uploadErr);
+          setErrorMsg('ছবি আপলোড করা যায়নি। আবার চেষ্টা করুন।');
+          setLoading(false);
+          return;
         }
       }
 
@@ -366,7 +372,7 @@ export const LoginPage: React.FC = () => {
                     ? 'Admin Invite Token'
                     : 'পাসওয়ার্ড পুনরুদ্ধার'}
                 </h2>
-                <p className="text-[11px] text-slate-400">Chapter 03 Strict Security Architecture</p>
+                <p className="text-[11px] text-slate-400">কঠোর নিরাপত্তা আর্কিটেকচার</p>
               </div>
             </div>
           </div>
@@ -622,7 +628,7 @@ export const LoginPage: React.FC = () => {
               {(mode === 'LOGIN' || mode === 'REGISTER') && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
-                    Password *
+                    পাসওয়ার্ড *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
@@ -649,7 +655,7 @@ export const LoginPage: React.FC = () => {
               {mode === 'REGISTER' && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
-                    Confirm Password *
+                    পাসওয়ার্ড নিশ্চিত করুন *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
@@ -720,7 +726,7 @@ export const LoginPage: React.FC = () => {
                       </button>
                     </p>
                     <p>
-                      Admin Invite আছে?{' '}
+                      অ্যাডমিন ইনভাইট আছে?{' '}
                       <button
                         type="button"
                         onClick={() => handleModeSwitch('INVITE_TOKEN')}
@@ -749,7 +755,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Footer info */}
         <div className="text-center text-[11px] text-slate-500 space-y-1">
-          <p>Support Link Box Official • Chapter 03 Security Standard</p>
+          <p>Support Link Box Official • কঠোর নিরাপত্তা মানদণ্ড</p>
           <p className="text-slate-600">সবচেয়ে নিরাপদ ও বিশ্বস্ত মেম্বার এনগেজমেন্ট প্ল্যাটফর্ম</p>
         </div>
       </div>

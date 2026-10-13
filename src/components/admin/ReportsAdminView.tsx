@@ -115,6 +115,8 @@ export const ReportsAdminView: React.FC = () => {
       case 'POLITICAL_POST':
       case 'political_post':
         return 'রাজনৈতিক পোস্ট';
+      case 'other':
+        return 'অন্যান্য সমস্যা';
       default:
         return cat;
     }

@@ -2507,7 +2507,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return { success: false, error: res.error };
       }
       await refreshData();
-      return { success: true };
+      // P0 fix 2026-10-09: propagate the email outcome — the edge function
+      // reports { success: true, email_sent: false } when Brevo fails.
+      return { success: true, emailSent: (res.data as any)?.email_sent !== false };
     }
 
     const target = members.find((m) => m.id === targetId);
