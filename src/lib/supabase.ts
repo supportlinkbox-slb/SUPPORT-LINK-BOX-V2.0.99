@@ -97,7 +97,7 @@ export function formatSupabaseError(error: any): string {
     return 'ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।';
   }
   if (msg.includes('Email not confirmed') || msg.includes('email_not_confirmed')) {
-    return 'আপনার ইমেইল ভেরিফাই করা হয়নি। অনুগ্রহ করে ইনবক্স চেক করুন।';
+    return 'আপনার ইমেইল ভেরিফাই করা হয়নি। লগইন পেজের নিচে "কোড দিয়ে যাচাই করুন" অপশনটি ব্যবহার করুন।';
   }
   if (
     msg.includes('rate limit') ||
@@ -249,7 +249,7 @@ export const authApi = {
           needsEmailConfirmation,
         },
         message: needsEmailConfirmation
-          ? 'আপনার Email-এ Confirmation link পাঠানো হয়েছে।'
+          ? 'আপনার Email-এ যাচাইকরণ কোড পাঠানো হয়েছে।'
           : 'Registration সফল হয়েছে। অ্যাডমিন এপ্রুভালের জন্য অপেক্ষা করুন।',
       };
     } catch (err: any) {

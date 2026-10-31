@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Lock,
   Mail,
@@ -71,7 +71,7 @@ const compressImage = async (file: File): Promise<File> => {
 export const LoginPage: React.FC = () => {
   const { login, register, resetPassword } = useApp();
 
-  const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN'>('LOGIN');
+  const [mode, setMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN' | 'VERIFY_EMAIL'>('LOGIN');
   const [inviteToken, setInviteToken] = useState('');
   const [inviteTokenHash, setInviteTokenHash] = useState('');
   const [loginIdentifier, setLoginIdentifier] = useState(''); // Used for Email or Member ID
@@ -94,6 +94,80 @@ export const LoginPage: React.FC = () => {
     type: 'EMAIL_CONFIRMATION' | 'REGISTER_SUCCESS' | 'PASSWORD_RESET_SENT';
     message: string;
   } | null>(null);
+  // Email OTP (code) verification state — used by the EMAIL_CONFIRMATION panel
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [otpInfo, setOtpInfo] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpResending, setOtpResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  const handleVerifyEmailOtp = async () => {
+    const token = (otpCode || '').trim();
+    if (!/^\d{6}$/.test(token)) {
+      setOtpError('ইমেইলে পাওয়া ৬ সংখ্যার কোডটি সঠিকভাবে লিখুন।');
+      return;
+    }
+    setOtpVerifying(true);
+    setOtpError('');
+    setOtpInfo('');
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: (email || '').trim().toLowerCase(),
+        token,
+        type: 'signup',
+      });
+      if (error) {
+        setOtpError('কোডটি সঠিক নয় অথবা মেয়াদ শেষ হয়ে গেছে। আবার চেষ্টা করুন, অথবা নতুন কোড পাঠান।');
+        setOtpVerifying(false);
+        return;
+      }
+      // Zero-login enforcement: verification must not leave an active session
+      // (AppContext also force-signs-out PENDING members as a second layer).
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        /* ignore */
+      }
+      setOtpCode('');
+      setSuccessNotice({
+        type: 'REGISTER_SUCCESS',
+        message:
+          'ইমেইল যাচাই সম্পন্ন হয়েছে! আপনার অ্যাকাউন্ট এখন অ্যাডমিন অ্যাপ্রুভালের অপেক্ষায় আছে। অ্যাপ্রুভাল পেলে লগইন করতে পারবেন।',
+      });
+    } catch {
+      setOtpError('যাচাই ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+    }
+    setOtpVerifying(false);
+  };
+
+  const handleResendEmailOtp = async () => {
+    if (resendCooldown > 0 || otpResending) return;
+    setOtpResending(true);
+    setOtpError('');
+    setOtpInfo('');
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: (email || '').trim().toLowerCase(),
+      });
+      if (error) {
+        setOtpError('নতুন কোড পাঠাতে সমস্যা হয়েছে। কিছুক্ষণ পরে আবার চেষ্টা করুন।');
+      } else {
+        setOtpInfo('নতুন কোড পাঠানো হয়েছে। ইমেইল (Spam ফোল্ডারসহ) চেক করুন।');
+        setResendCooldown(60);
+      }
+    } catch {
+      setOtpError('নতুন কোড পাঠাতে সমস্যা হয়েছে। কিছুক্ষণ পরে আবার চেষ্টা করুন।');
+    }
+    setOtpResending(false);
+  };
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,11 +177,14 @@ export const LoginPage: React.FC = () => {
     return validateAndExtractFacebookProfile((facebookUrl || '').trim());
   }, [facebookUrl]);
 
-  const handleModeSwitch = (newMode: 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN') => {
+  const handleModeSwitch = (newMode: 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD' | 'INVITE_TOKEN' | 'VERIFY_EMAIL') => {
     setMode(newMode);
     setErrorMsg('');
     setPendingNotice(null);
     setSuccessNotice(null);
+    setOtpCode('');
+    setOtpError('');
+    setOtpInfo('');
     setPassword('');
     setConfirmPassword('');
     setInviteToken('');
@@ -160,6 +237,13 @@ export const LoginPage: React.FC = () => {
     
     if (isInvite) {
       await handleVerifyInvite();
+      return;
+    }
+
+    if (mode === 'VERIFY_EMAIL') {
+      setLoading(true);
+      await handleVerifyEmailOtp();
+      setLoading(false);
       return;
     }
 
@@ -332,7 +416,7 @@ export const LoginPage: React.FC = () => {
           type: 'EMAIL_CONFIRMATION',
           message:
             res.message ||
-            'আপনার Email-এ Confirmation link পাঠানো হয়েছে। অনুগ্রহ করে Email চেক করে অ্যাকাউন্ট নিশ্চিত করুন।',
+            'আপনার Email-এ ৬ সংখ্যার যাচাইকরণ কোড পাঠানো হয়েছে। কোডটি এই পেজে লিখে যাচাই করুন।',
         });
       } else {
         setSuccessNotice({
@@ -406,13 +490,62 @@ export const LoginPage: React.FC = () => {
                   {successNotice.type === 'PASSWORD_RESET_SENT'
                     ? 'পাসওয়ার্ড রিসেট নির্দেশনা পাঠানো হয়েছে'
                     : successNotice.type === 'EMAIL_CONFIRMATION'
-                    ? 'ইমেইল ভেরিফিকেশন লিংক পাঠানো হয়েছে'
+                    ? 'ইমেইল যাচাইকরণ পাঠানো হয়েছে'
                     : 'রেজিস্ট্রেশন সফল (অপেক্ষমান)'}
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed px-2">
                   {successNotice.message}
                 </p>
               </div>
+              {successNotice.type === 'EMAIL_CONFIRMATION' && (
+                <div className="text-left bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-cyan-300">
+                    <KeyRound className="w-4 h-4" />
+                    <p className="text-xs font-bold">কোড দিয়ে যাচাই করুন</p>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    রেজিস্ট্রেশনের সময় আপনার ইমেইলে পাঠানো ৬ সংখ্যার কোডটি নিচে লিখুন।
+                    কোড না পেলে নিচের বাটনে নতুন কোড পাঠান — Spam ফোল্ডারেও দেখুন।
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(e) => {
+                        setOtpCode(e.target.value.replace(/\D/g, ''));
+                        setOtpError('');
+                      }}
+                      placeholder="৬ সংখ্যার কোড"
+                      className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-center text-base font-bold tracking-[0.35em] text-white placeholder:text-slate-500 placeholder:tracking-normal placeholder:font-medium focus:outline-none focus:border-cyan-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyEmailOtp}
+                      disabled={otpVerifying || otpCode.length !== 6}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-bold shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {otpVerifying ? 'যাচাই হচ্ছে...' : 'যাচাই করুন'}
+                    </button>
+                  </div>
+                  {otpError && <p className="text-[11px] text-red-400 font-medium">{otpError}</p>}
+                  {otpInfo && <p className="text-[11px] text-emerald-400 font-medium">{otpInfo}</p>}
+                  <button
+                    type="button"
+                    onClick={handleResendEmailOtp}
+                    disabled={otpResending || resendCooldown > 0}
+                    className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 disabled:text-slate-500 disabled:cursor-not-allowed transition"
+                  >
+                    {resendCooldown > 0
+                      ? `নতুন কোড পাঠাতে ${resendCooldown} সেকেন্ড অপেক্ষা করুন`
+                      : otpResending
+                      ? 'পাঠানো হচ্ছে...'
+                      : 'কোড পাইনি — আবার পাঠান'}
+                  </button>
+                </div>
+              )}
               <button
                 onClick={() => {
                   setSuccessNotice(null);
@@ -594,7 +727,7 @@ export const LoginPage: React.FC = () => {
               )}
 
               {/* Email Address / Member ID */}
-              {(mode === 'LOGIN' || mode === 'REGISTER' || mode === 'FORGOT_PASSWORD') && (
+              {(mode === 'LOGIN' || mode === 'REGISTER' || mode === 'FORGOT_PASSWORD' || mode === 'VERIFY_EMAIL') && (
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
                   {mode === 'LOGIN' ? 'Email অথবা Member ID *' : 'Email Address *'}
@@ -691,6 +824,59 @@ export const LoginPage: React.FC = () => {
                 </div>
               )}
 
+              {mode === 'VERIFY_EMAIL' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+                      যাচাইকরণ কোড *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(e) => {
+                        setOtpCode(e.target.value.replace(/\D/g, ''));
+                        setOtpError('');
+                      }}
+                      placeholder="৬ সংখ্যার কোড"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-center text-base font-bold tracking-[0.35em] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                    />
+                  </div>
+                  {otpError && <p className="text-[11px] text-red-400 font-medium">{otpError}</p>}
+                  {otpInfo && <p className="text-[11px] text-emerald-400 font-medium">{otpInfo}</p>}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500">কোড না পেলে Spam ফোল্ডার দেখুন</span>
+                    <button
+                      type="button"
+                      onClick={handleResendEmailOtp}
+                      disabled={otpResending || resendCooldown > 0}
+                      className="font-bold text-cyan-400 hover:text-cyan-300 disabled:text-slate-500 disabled:cursor-not-allowed transition"
+                    >
+                      {resendCooldown > 0
+                        ? `${resendCooldown} সেকেন্ড পরে আবার পাঠান`
+                        : otpResending
+                        ? 'পাঠানো হচ্ছে...'
+                        : 'কোড আবার পাঠান'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {mode === 'LOGIN' && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('VERIFY_EMAIL')}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 transition"
+                  >
+                    ইমেইল যাচাই বাকি আছে?{' '}
+                    <span className="text-cyan-400 font-bold">কোড দিয়ে যাচাই করুন</span>
+                  </button>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -705,6 +891,8 @@ export const LoginPage: React.FC = () => {
                   'লগইন করুন'
                 ) : mode === 'REGISTER' ? (
                   'অ্যাকাউন্ট রেজিস্টার করুন'
+                ) : mode === 'VERIFY_EMAIL' ? (
+                  'কোড যাচাই করুন'
                 ) : mode === 'INVITE_TOKEN' ? (
                   'টোকেন ভেরিফাই করুন'
                 ) : (

@@ -1047,7 +1047,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             success: true,
             needsEmailConfirmation: true,
             message:
-              'আপনার Email-এ Confirmation link পাঠানো হয়েছে। অনুগ্রহ করে Email চেক করে অ্যাকাউন্ট নিশ্চিত করুন।',
+              'আপনার Email-এ ৬ সংখ্যার যাচাইকরণ কোড পাঠানো হয়েছে। কোডটি এই পেজে লিখে যাচাই করুন।',
           };
         }
 
